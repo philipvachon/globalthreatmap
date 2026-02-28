@@ -22,6 +22,7 @@ import { useMaritime } from "@/hooks/use-maritime";
 import { useWeather } from "@/hooks/use-weather";
 import { useAlerts } from "@/hooks/use-alerts";
 import { useSatellites } from "@/hooks/use-satellites";
+import { SatelliteGlobeLayer, projectSatToScreen } from "@/components/map/satellite-globe-layer";
 import { twoline2satrec, propagate, gstime, eciToGeodetic, degreesLat, degreesLong } from "satellite.js";
 import { threatLevelColors } from "@/types";
 import { EventPopup } from "./event-popup";
@@ -330,30 +331,6 @@ const alertsLineLayer: LayerProps = {
   },
 };
 
-// Orbital position dots — altitude-banded color scheme:
-//   < 600 km  = VLEO/LEO shelf (ISS, Starlink) → green
-//   600-2000  = LEO → cyan
-//   2000-35k  = MEO (GNSS) → yellow
-//   ~35786    = GEO → red
-//   > 35986   = HEO/GTO → purple
-const satelliteOrbitLayer: LayerProps = {
-  id: "satellite-orbits",
-  type: "circle",
-  paint: {
-    "circle-color": [
-      "step", ["get", "altKm"],
-      "#4ade80",  600,
-      "#22d3ee",  2000,
-      "#facc15",  35586,
-      "#f87171",  35986,
-      "#c084fc",
-    ],
-    "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 1.5, 5, 2.5, 10, 4],
-    "circle-opacity": 0.9,
-    "circle-stroke-width": 0,
-  },
-};
-
 // ─── Visual mode CSS filters ──────────────────────────────────────────────────
 
 const VISUAL_FILTERS: Record<string, string> = {
@@ -381,7 +358,11 @@ type SelectedSatellite      = { longitude: number; latitude: number; name: strin
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ThreatMap() {
-  const mapRef = useRef<MapRef>(null);
+  const mapRef         = useRef<MapRef>(null);
+  const satLayerRef     = useRef<SatelliteGlobeLayer | null>(null);
+  // Keep a live ref to latest positions so the globe effect can seed the
+  // layer on first enable without being re-triggered every 30 s.
+  const satPositionsRef = useRef<import("@/stores/map-store").SatellitePosition[]>([]);
 
   const {
     viewport, setViewport,
@@ -453,6 +434,67 @@ export function ThreatMap() {
     const id = setInterval(() => setBlinkOpacity((p) => (p === 0.4 ? 0.15 : 0.4)), 400);
     return () => clearInterval(id);
   }, [selCountryCode, isCountryLoading]);
+
+  // ── Satellite globe layer lifecycle ──────────────────────────────────────
+  // Keep latestPositions ref in sync so the toggle effect can seed the layer
+  useEffect(() => { satPositionsRef.current = satellitePositions; }, [satellitePositions]);
+
+  // Toggle: switch to globe projection + fog + custom 3-D layer
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+
+    if (showSatellites) {
+      // Globe projection gives the 3-D spherical view
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (map as any).setProjection?.("globe");
+
+      // Space environment fog
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (map as any).setFog?.({
+        "space-color":    "#000510",
+        "star-intensity":  0.5,
+        "color":          "rgba(10, 25, 60, 0.4)",
+        "high-color":     "#1a3a8a",
+        "horizon-blend":   0.06,
+        "range":          [0.5, 10],
+      });
+
+      // Fly to globe overview if too zoomed in to see the sphere
+      if (map.getZoom() > 4) {
+        map.flyTo({ zoom: 1.5, duration: 1500, essential: true });
+      }
+
+      // Add the WebGL custom layer
+      if (!map.getLayer("satellite-3d-orbits")) {
+        const layer = new SatelliteGlobeLayer();
+        satLayerRef.current = layer;
+        map.addLayer(layer);
+        if (satPositionsRef.current.length > 0) {
+          layer.setPositions(satPositionsRef.current);
+        }
+      }
+    } else {
+      // Revert to flat Mercator
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (map as any).setProjection?.("mercator");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (map as any).setFog?.(null);
+
+      if (satLayerRef.current && map.getLayer("satellite-3d-orbits")) {
+        map.removeLayer("satellite-3d-orbits");
+        satLayerRef.current = null;
+      }
+      setSelSatellite(null);
+    }
+  // setSelSatellite is stable (Zustand setter) — only run on toggle change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSatellites]);
+
+  // Forward position updates to the custom WebGL layer
+  useEffect(() => {
+    satLayerRef.current?.setPositions(satellitePositions);
+  }, [satellitePositions]);
 
   function clearPopups() {
     selectEvent(null);
@@ -540,20 +582,6 @@ export function ThreatMap() {
     features: alertsFeatures,
   }), [alertsFeatures]);
 
-  // Satellite orbital positions GeoJSON
-  const satellitesGeoJSON = useMemo(() => ({
-    type: "FeatureCollection" as const,
-    features: satellitePositions.map((s) => ({
-      type: "Feature" as const,
-      properties: {
-        noradId: s.noradId, name: s.name, altKm: s.altKm,
-        category: s.category, inclination: s.inclination,
-        tle1: s.tle1, tle2: s.tle2,
-      },
-      geometry: { type: "Point" as const, coordinates: [s.longitude, s.latitude] },
-    })),
-  }), [satellitePositions]);
-
   // Selected satellite ground track — 90-min forward track at 2-min intervals
   const satTrackGeoJSON = useMemo(() => {
     if (!selSatellite || selSatellite.track.length < 2) return null;
@@ -610,13 +638,58 @@ export function ThreatMap() {
     if (showFAACameras) ids.push("faa-cameras");
     if (showMaritime) ids.push("vessel-points");
     if (showAlerts) ids.push("alerts-fill");
-    if (showSatellites) ids.push("satellite-orbits");
+    // satellite-3d-orbits is a CustomLayer — Mapbox can't query it, handled via 3D hit-test
     return ids;
-  }, [showClusters, showAircraft, showSeismic, showNYCCameras, showFAACameras, showMaritime, showAlerts, showSatellites]);
+  }, [showClusters, showAircraft, showSeismic, showNYCCameras, showFAACameras, showMaritime, showAlerts]);
 
   // ─── Map click handler ───────────────────────────────────────────────────────
 
   const handleMapClick = useCallback(async (event: MapMouseEvent) => {
+    // ── Satellite 3-D hit-test ────────────────────────────────────────────────
+    // CustomLayer isn't in interactiveLayerIds so we do our own screen-space
+    // nearest-neighbour search using the camera's mercator matrix for accuracy.
+    if (showSatellites && mapRef.current) {
+      const map  = mapRef.current.getMap();
+      if (map.getZoom() <= 4.5) {
+        const cx = event.point.x;
+        const cy = event.point.y;
+        const HIT_PX = 14;
+        let closest: (typeof satellitePositions)[0] | null = null;
+        let bestDist = HIT_PX;
+        for (const sat of satellitePositions) {
+          const sp = projectSatToScreen(map, sat.longitude, sat.latitude, sat.altKm);
+          if (!sp) continue;
+          const d = Math.hypot(sp.x - cx, sp.y - cy);
+          if (d < bestDist) { bestDist = d; closest = sat; }
+        }
+        if (closest) {
+          clearPopups();
+          const track: [number, number][] = [];
+          try {
+            const satrec = twoline2satrec(closest.tle1, closest.tle2);
+            const base   = Date.now();
+            for (let min = 0; min <= 90; min += 2) {
+              const t   = new Date(base + min * 60_000);
+              const pv  = propagate(satrec, t);
+              if (!pv) continue;
+              const gst = gstime(t);
+              const geo = eciToGeodetic(pv.position, gst);
+              const lat = degreesLat(geo.latitude);
+              const lng = degreesLong(geo.longitude);
+              if (isFinite(lat) && isFinite(lng)) track.push([lng, lat]);
+            }
+          } catch { /* ignore */ }
+          setSelSatellite({
+            longitude: closest.longitude, latitude: closest.latitude,
+            name: closest.name, noradId: closest.noradId,
+            altKm: closest.altKm, inclination: closest.inclination,
+            category: closest.category, tle1: closest.tle1, tle2: closest.tle2, track,
+          });
+          return;
+        }
+      }
+    }
+
     if (event.features?.length) {
       const feat = event.features[0];
       const lid = feat.layer?.id;
@@ -668,33 +741,6 @@ export function ThreatMap() {
         setSelAlert({ longitude: event.lngLat.lng, latitude: event.lngLat.lat, event: props.event, severity: props.severity, urgency: props.urgency, areaDesc: props.areaDesc, headline: props.headline, ends: props.ends });
         return;
       }
-      if (lid === "satellite-orbits") {
-        // Compute 90-min forward ground track at 2-min intervals
-        const tle1 = props.tle1 as string;
-        const tle2 = props.tle2 as string;
-        const track: [number, number][] = [];
-        try {
-          const satrec = twoline2satrec(tle1, tle2);
-          const base = Date.now();
-          for (let min = 0; min <= 90; min += 2) {
-            const t = new Date(base + min * 60_000);
-            const pv = propagate(satrec, t);
-            if (!pv) continue;
-            const gst = gstime(t);
-            const geo = eciToGeodetic(pv.position, gst);
-            const lat = degreesLat(geo.latitude);
-            const lng = degreesLong(geo.longitude);
-            if (isFinite(lat) && isFinite(lng)) track.push([lng, lat]);
-          }
-        } catch { /* ignore propagation error */ }
-        setSelSatellite({
-          longitude: coords[0], latitude: coords[1],
-          name: props.name as string, noradId: props.noradId as string,
-          altKm: props.altKm as number, inclination: props.inclination as number,
-          category: props.category as string, tle1, tle2, track,
-        });
-        return;
-      }
       return;
     }
 
@@ -713,7 +759,8 @@ export function ThreatMap() {
         setIsCountryLoading(true);
       }
     } catch { /* ignore */ }
-  }, [filteredEvents, selectEvent, viewport.zoom, checkLimit, requiresAuth, isAuthenticated, initialized]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredEvents, selectEvent, viewport.zoom, checkLimit, requiresAuth, isAuthenticated, initialized, showSatellites, satellitePositions]);
 
   const handleMouseEnter = useCallback(() => { if (mapRef.current) mapRef.current.getCanvas().style.cursor = "pointer"; }, []);
   const handleMouseLeave = useCallback(() => { if (mapRef.current) mapRef.current.getCanvas().style.cursor = ""; }, []);
@@ -806,14 +853,9 @@ export function ThreatMap() {
             </Source>
           )}
 
-          {/* Satellite orbital positions */}
-          {showSatellites && satellitePositions.length > 0 && (
-            <Source id="satellite-positions" type="geojson" data={satellitesGeoJSON}>
-              <Layer {...satelliteOrbitLayer} />
-            </Source>
-          )}
+          {/* satellite-3d-orbits custom WebGL layer is managed imperatively via satLayerRef */}
 
-          {/* Selected satellite ground track */}
+          {/* Selected satellite ground track — ground-level dashed line */}
           {selSatellite && satTrackGeoJSON && (
             <Source id="sat-track" type="geojson" data={satTrackGeoJSON}>
               <Layer
