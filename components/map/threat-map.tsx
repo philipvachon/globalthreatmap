@@ -21,6 +21,8 @@ import { useCameras } from "@/hooks/use-cameras";
 import { useMaritime } from "@/hooks/use-maritime";
 import { useWeather } from "@/hooks/use-weather";
 import { useAlerts } from "@/hooks/use-alerts";
+import { useSatellites } from "@/hooks/use-satellites";
+import { twoline2satrec, propagate, gstime, eciToGeodetic, degreesLat, degreesLong } from "satellite.js";
 import { threatLevelColors } from "@/types";
 import { EventPopup } from "./event-popup";
 import { CameraPopup } from "./camera-popup";
@@ -328,6 +330,30 @@ const alertsLineLayer: LayerProps = {
   },
 };
 
+// Orbital position dots — altitude-banded color scheme:
+//   < 600 km  = VLEO/LEO shelf (ISS, Starlink) → green
+//   600-2000  = LEO → cyan
+//   2000-35k  = MEO (GNSS) → yellow
+//   ~35786    = GEO → red
+//   > 35986   = HEO/GTO → purple
+const satelliteOrbitLayer: LayerProps = {
+  id: "satellite-orbits",
+  type: "circle",
+  paint: {
+    "circle-color": [
+      "step", ["get", "altKm"],
+      "#4ade80",  600,
+      "#22d3ee",  2000,
+      "#facc15",  35586,
+      "#f87171",  35986,
+      "#c084fc",
+    ],
+    "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 1.5, 5, 2.5, 10, 4],
+    "circle-opacity": 0.9,
+    "circle-stroke-width": 0,
+  },
+};
+
 // ─── Visual mode CSS filters ──────────────────────────────────────────────────
 
 const VISUAL_FILTERS: Record<string, string> = {
@@ -350,6 +376,7 @@ type SelectedEarthquake     = { longitude: number; latitude: number; magnitude: 
 type SelectedCamera         = { longitude: number; latitude: number; id: string };
 type SelectedVessel         = { longitude: number; latitude: number; mmsi: string; name: string; type: string; speed: number; heading: number; destination?: string };
 type SelectedAlert          = { longitude: number; latitude: number; event: string; severity: string; urgency: string; areaDesc: string; headline?: string; ends?: string };
+type SelectedSatellite      = { longitude: number; latitude: number; name: string; noradId: string; altKm: number; inclination: number; category: string; tle1: string; tle2: string; track: [number, number][] };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -369,6 +396,7 @@ export function ThreatMap() {
     showFire,
     showWeather, weatherPath, weatherHost,
     showAlerts, alertsFeatures,
+    showSatellites, satellitePositions,
     showSatellite, satelliteDate, satelliteSource, satelliteOpacity,
     visualMode,
   } = useMapStore();
@@ -383,6 +411,7 @@ export function ThreatMap() {
   useMaritime();
   useWeather();
   useAlerts();
+  useSatellites();
 
   const [selEntity, setSelEntity]     = useState<SelectedEntityLocation | null>(null);
   const [selBase, setSelBase]         = useState<SelectedMilitaryBase | null>(null);
@@ -391,6 +420,7 @@ export function ThreatMap() {
   const [selCamera, setSelCamera]     = useState<SelectedCamera | null>(null);
   const [selVessel, setSelVessel]     = useState<SelectedVessel | null>(null);
   const [selAlert, setSelAlert]       = useState<SelectedAlert | null>(null);
+  const [selSatellite, setSelSatellite] = useState<SelectedSatellite | null>(null);
   const [selCountry, setSelCountry]   = useState<string | null>(null);
   const [selCountryCode, setSelCountryCode] = useState<string | null>(null);
   const [isCountryLoading, setIsCountryLoading] = useState(false);
@@ -433,6 +463,7 @@ export function ThreatMap() {
     setSelCamera(null);
     setSelVessel(null);
     setSelAlert(null);
+    setSelSatellite(null);
   }
 
   // ─── GeoJSON memos ──────────────────────────────────────────────────────────
@@ -509,6 +540,49 @@ export function ThreatMap() {
     features: alertsFeatures,
   }), [alertsFeatures]);
 
+  // Satellite orbital positions GeoJSON
+  const satellitesGeoJSON = useMemo(() => ({
+    type: "FeatureCollection" as const,
+    features: satellitePositions.map((s) => ({
+      type: "Feature" as const,
+      properties: {
+        noradId: s.noradId, name: s.name, altKm: s.altKm,
+        category: s.category, inclination: s.inclination,
+        tle1: s.tle1, tle2: s.tle2,
+      },
+      geometry: { type: "Point" as const, coordinates: [s.longitude, s.latitude] },
+    })),
+  }), [satellitePositions]);
+
+  // Selected satellite ground track — 90-min forward track at 2-min intervals
+  const satTrackGeoJSON = useMemo(() => {
+    if (!selSatellite || selSatellite.track.length < 2) return null;
+    // Split at antimeridian crossings so lines don't wrap around the globe
+    const segments: [number, number][][] = [];
+    let current: [number, number][] = [selSatellite.track[0]];
+    for (let i = 1; i < selSatellite.track.length; i++) {
+      const prev = selSatellite.track[i - 1];
+      const curr = selSatellite.track[i];
+      if (Math.abs(curr[0] - prev[0]) > 180) {
+        segments.push(current);
+        current = [curr];
+      } else {
+        current.push(curr);
+      }
+    }
+    segments.push(current);
+    return {
+      type: "FeatureCollection" as const,
+      features: segments
+        .filter((s) => s.length >= 2)
+        .map((seg) => ({
+          type: "Feature" as const,
+          properties: {},
+          geometry: { type: "LineString" as const, coordinates: seg },
+        })),
+    };
+  }, [selSatellite]);
+
   // Weather radar tile URL — RainViewer path + host; key forces source remount on update
   const weatherTileUrl = weatherPath
     ? `${weatherHost}${weatherPath}/256/{z}/{x}/{y}/4/1_1.png`
@@ -536,8 +610,9 @@ export function ThreatMap() {
     if (showFAACameras) ids.push("faa-cameras");
     if (showMaritime) ids.push("vessel-points");
     if (showAlerts) ids.push("alerts-fill");
+    if (showSatellites) ids.push("satellite-orbits");
     return ids;
-  }, [showClusters, showAircraft, showSeismic, showNYCCameras, showFAACameras, showMaritime, showAlerts]);
+  }, [showClusters, showAircraft, showSeismic, showNYCCameras, showFAACameras, showMaritime, showAlerts, showSatellites]);
 
   // ─── Map click handler ───────────────────────────────────────────────────────
 
@@ -591,6 +666,33 @@ export function ThreatMap() {
       if (lid === "alerts-fill") {
         // Use click lngLat as anchor since alerts are polygons
         setSelAlert({ longitude: event.lngLat.lng, latitude: event.lngLat.lat, event: props.event, severity: props.severity, urgency: props.urgency, areaDesc: props.areaDesc, headline: props.headline, ends: props.ends });
+        return;
+      }
+      if (lid === "satellite-orbits") {
+        // Compute 90-min forward ground track at 2-min intervals
+        const tle1 = props.tle1 as string;
+        const tle2 = props.tle2 as string;
+        const track: [number, number][] = [];
+        try {
+          const satrec = twoline2satrec(tle1, tle2);
+          const base = Date.now();
+          for (let min = 0; min <= 90; min += 2) {
+            const t = new Date(base + min * 60_000);
+            const pv = propagate(satrec, t);
+            if (!pv) continue;
+            const gst = gstime(t);
+            const geo = eciToGeodetic(pv.position, gst);
+            const lat = degreesLat(geo.latitude);
+            const lng = degreesLong(geo.longitude);
+            if (isFinite(lat) && isFinite(lng)) track.push([lng, lat]);
+          }
+        } catch { /* ignore propagation error */ }
+        setSelSatellite({
+          longitude: coords[0], latitude: coords[1],
+          name: props.name as string, noradId: props.noradId as string,
+          altKm: props.altKm as number, inclination: props.inclination as number,
+          category: props.category as string, tle1, tle2, track,
+        });
         return;
       }
       return;
@@ -701,6 +803,29 @@ export function ThreatMap() {
             <Source id="nws-alerts" type="geojson" data={alertsGeoJSON}>
               <Layer {...alertsFillLayer} />
               <Layer {...alertsLineLayer} />
+            </Source>
+          )}
+
+          {/* Satellite orbital positions */}
+          {showSatellites && satellitePositions.length > 0 && (
+            <Source id="satellite-positions" type="geojson" data={satellitesGeoJSON}>
+              <Layer {...satelliteOrbitLayer} />
+            </Source>
+          )}
+
+          {/* Selected satellite ground track */}
+          {selSatellite && satTrackGeoJSON && (
+            <Source id="sat-track" type="geojson" data={satTrackGeoJSON}>
+              <Layer
+                id="sat-track-line"
+                type="line"
+                paint={{
+                  "line-color": "#c084fc",
+                  "line-width": 1.5,
+                  "line-opacity": 0.7,
+                  "line-dasharray": [3, 2],
+                }}
+              />
             </Source>
           )}
 
@@ -943,6 +1068,44 @@ export function ThreatMap() {
                   <div className="flex gap-1"><span className="shrink-0">Area:</span><span className="text-foreground line-clamp-2">{selAlert.areaDesc}</span></div>
                   {selAlert.ends && (
                     <div className="flex gap-1"><span className="shrink-0">Expires:</span><span className="text-foreground">{new Date(selAlert.ends).toUTCString().slice(5, 22)}</span></div>
+                  )}
+                </div>
+              </div>
+            </Popup>
+          )}
+
+          {selSatellite && (
+            <Popup longitude={selSatellite.longitude} latitude={selSatellite.latitude}
+              anchor="bottom" onClose={() => setSelSatellite(null)} closeButton closeOnClick={false} className="threat-popup">
+              <div className="min-w-[220px] p-2">
+                <div className="mb-2 flex items-center gap-2">
+                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm
+                    ${ selSatellite.altKm < 600    ? "bg-green-500/20 text-green-400"
+                     : selSatellite.altKm < 2000   ? "bg-cyan-500/20 text-cyan-400"
+                     : selSatellite.altKm < 35586  ? "bg-yellow-500/20 text-yellow-400"
+                     : selSatellite.altKm < 35986  ? "bg-red-500/20 text-red-400"
+                     : "bg-purple-500/20 text-purple-400"}`}>
+                    🛰
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold leading-tight">{selSatellite.name}</h3>
+                    <span className="text-xs text-muted-foreground capitalize">{selSatellite.category}</span>
+                  </div>
+                </div>
+                <div className="space-y-1 text-xs text-muted-foreground">
+                  <div className="flex justify-between"><span>NORAD ID</span><span className="font-mono text-foreground">{selSatellite.noradId}</span></div>
+                  <div className="flex justify-between"><span>Altitude</span><span className="text-foreground">{Math.round(selSatellite.altKm).toLocaleString()} km</span></div>
+                  <div className="flex justify-between"><span>Inclination</span><span className="text-foreground">{selSatellite.inclination.toFixed(1)}°</span></div>
+                  <div className="flex justify-between"><span>Orbit</span>
+                    <span className={`font-medium ${ selSatellite.altKm < 600 ? "text-green-400"
+                      : selSatellite.altKm < 2000 ? "text-cyan-400" : selSatellite.altKm < 35586 ? "text-yellow-400"
+                      : selSatellite.altKm < 35986 ? "text-red-400" : "text-purple-400"}`}>
+                      { selSatellite.altKm < 600 ? "VLEO" : selSatellite.altKm < 2000 ? "LEO"
+                        : selSatellite.altKm < 35586 ? "MEO" : selSatellite.altKm < 35986 ? "GEO" : "HEO" }
+                    </span>
+                  </div>
+                  {selSatellite.track.length > 0 && (
+                    <p className="pt-0.5 text-[10px] text-purple-400/70">90-min ground track shown</p>
                   )}
                 </div>
               </div>

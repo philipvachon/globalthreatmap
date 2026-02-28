@@ -58,6 +58,18 @@ export interface VesselMarker {
   flag?: string;
 }
 
+export interface SatellitePosition {
+  noradId: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  altKm: number;
+  category: string;
+  inclination: number;
+  tle1: string;
+  tle2: string;
+}
+
 export type VisualMode = "normal" | "crt" | "flir" | "nightvision";
 
 function getYesterday(): string {
@@ -105,6 +117,9 @@ interface MapState {
   camerasLoading: boolean;
   vessels: VesselMarker[];
   maritimeConnected: boolean;
+  showSatellites: boolean;
+  satellitePositions: SatellitePosition[];
+  satellitesLoading: boolean;
 
   setViewport: (viewport: Partial<MapViewport>) => void;
   flyTo: (longitude: number, latitude: number, zoom?: number) => void;
@@ -148,6 +163,9 @@ interface MapState {
   upsertVessel: (vessel: VesselMarker) => void;
   clearVessels: () => void;
   setMaritimeConnected: (connected: boolean) => void;
+  toggleSatellites: () => void;
+  setSatellitePositions: (positions: SatellitePosition[]) => void;
+  setSatellitesLoading: (loading: boolean) => void;
 }
 
 const DEFAULT_VIEWPORT: MapViewport = {
@@ -196,6 +214,9 @@ export const useMapStore = create<MapState>((set) => ({
   camerasLoading: false,
   vessels: [],
   maritimeConnected: false,
+  showSatellites: false,
+  satellitePositions: [],
+  satellitesLoading: false,
 
   setViewport: (viewport) =>
     set((state) => ({ viewport: { ...state.viewport, ...viewport } })),
@@ -261,4 +282,8 @@ export const useMapStore = create<MapState>((set) => ({
 
   clearVessels:          () => set({ vessels: [] }),
   setMaritimeConnected:  (connected) => set({ maritimeConnected: connected }),
+
+  toggleSatellites:       () => set((s) => ({ showSatellites: !s.showSatellites })),
+  setSatellitePositions:  (positions) => set({ satellitePositions: positions }),
+  setSatellitesLoading:   (loading)   => set({ satellitesLoading: loading }),
 }));

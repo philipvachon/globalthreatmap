@@ -7,7 +7,7 @@ import {
   Flame, Dot, Shield, PlaneTakeoff, Activity, TrafficCone,
   Camera, CloudRain, Anchor, Zap, Satellite,
   Monitor, Tv2, Eye, Moon,
-  Radar, TriangleAlert,
+  Radar, TriangleAlert, Orbit,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -79,7 +79,8 @@ export function LayerPanel() {
     showSatellite,    toggleSatellite,
     showWeather,      toggleWeather,
     showAlerts,       toggleAlerts,
-    aircraftLoading, seismicLoading, camerasLoading, maritimeConnected, alertsLoading,
+    showSatellites,   toggleSatellites,
+    aircraftLoading, seismicLoading, camerasLoading, maritimeConnected, alertsLoading, satellitesLoading,
     visualMode, setVisualMode,
   } = useMapStore();
 
@@ -140,6 +141,14 @@ export function LayerPanel() {
           />
           <ToggleRow label="Traffic"       active={showTraffic}      onToggle={toggleTraffic}      icon={<TrafficCone className="h-3.5 w-3.5" />} iconColor="text-emerald-400" />
           <ToggleRow label="Military Bases" active={showMilitaryBases} onToggle={toggleMilitaryBases} icon={<Shield className="h-3.5 w-3.5" />}  iconColor="text-green-400" />
+          <ToggleRow
+            label="Sat Orbits"
+            active={showSatellites}
+            onToggle={toggleSatellites}
+            icon={<Orbit className="h-3.5 w-3.5" />}
+            iconColor="text-purple-400"
+            loading={satellitesLoading}
+          />
         </div>
 
         {/* ── Surveillance ─────────────────────────── */}
