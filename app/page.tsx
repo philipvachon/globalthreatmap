@@ -6,7 +6,7 @@ import { Header } from "@/components/header";
 import { Sidebar } from "@/components/sidebar";
 import { ThreatMap } from "@/components/map/threat-map";
 import { TimelineScrubber } from "@/components/map/timeline-scrubber";
-import { MapControls } from "@/components/map/map-controls";
+import { LayerPanel } from "@/components/map/layer-panel";
 import { WelcomeModal } from "@/components/welcome-modal";
 import { SignInPanel, SignInModal } from "@/components/auth";
 import { PolymarketTicker, POLYMARKET_TICKER_HEIGHT } from "@/components/polymarket-ticker";
@@ -44,8 +44,11 @@ export default function Home() {
       <div className="flex flex-1 overflow-hidden">
         <div className="relative flex-1">
           <ThreatMap />
+          {/* Layer control panel — top-left, below header */}
+          <div className="absolute left-4 top-4 z-10">
+            <LayerPanel />
+          </div>
           <TimelineScrubber />
-          <MapControls />
         </div>
         <Sidebar />
       </div>

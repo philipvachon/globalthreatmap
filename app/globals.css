@@ -268,3 +268,36 @@ body {
 .threat-critical {
   animation: pulse-threat 2s ease-in-out infinite;
 }
+
+/* ── Visual Mode Shaders ─────────────────────────────────────────────────── */
+
+/* CRT phosphor scanline overlay */
+.crt-scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.18) 2px,
+    rgba(0, 0, 0, 0.18) 4px
+  );
+}
+
+/* Faint green vignette for Night Vision */
+.visual-mode-nightvision::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 40, 0, 0.55) 100%);
+  z-index: 5;
+}
+
+/* Subtle amber vignette for FLIR */
+.visual-mode-flir::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(30, 15, 0, 0.5) 100%);
+  z-index: 5;
+}
