@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { MapViewport, GeoLocation } from "@/types";
+import type { SatelliteSource } from "@/components/map/satellite-controls";
 
 interface EntityLocationMarker extends GeoLocation {
   entityName: string;
@@ -59,6 +60,12 @@ export interface VesselMarker {
 
 export type VisualMode = "normal" | "crt" | "flir" | "nightvision";
 
+function getYesterday(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().split("T")[0];
+}
+
 interface MapState {
   viewport: MapViewport;
   showHeatmap: boolean;
@@ -72,6 +79,10 @@ interface MapState {
   showFAACameras: boolean;
   showMaritime: boolean;
   showFire: boolean;
+  showSatellite: boolean;
+  satelliteDate: string;
+  satelliteSource: SatelliteSource;
+  satelliteOpacity: number;
   visualMode: VisualMode;
   isDrawingWatchbox: boolean;
   activeWatchboxId: string | null;
@@ -101,6 +112,10 @@ interface MapState {
   toggleFAACameras: () => void;
   toggleMaritime: () => void;
   toggleFire: () => void;
+  toggleSatellite: () => void;
+  setSatelliteDate: (date: string) => void;
+  setSatelliteSource: (source: SatelliteSource) => void;
+  setSatelliteOpacity: (opacity: number) => void;
   setVisualMode: (mode: VisualMode) => void;
   startDrawingWatchbox: () => void;
   stopDrawingWatchbox: () => void;
@@ -143,6 +158,10 @@ export const useMapStore = create<MapState>((set) => ({
   showFAACameras: false,
   showMaritime: false,
   showFire: false,
+  showSatellite: false,
+  satelliteDate: getYesterday(),
+  satelliteSource: "modis-terra",
+  satelliteOpacity: 0.85,
   visualMode: "normal",
   isDrawingWatchbox: false,
   activeWatchboxId: null,
@@ -165,53 +184,57 @@ export const useMapStore = create<MapState>((set) => ({
   flyTo: (longitude, latitude, zoom = 8) =>
     set((state) => ({ viewport: { ...state.viewport, longitude, latitude, zoom } })),
 
-  toggleHeatmap: () => set((state) => ({ showHeatmap: !state.showHeatmap })),
-  toggleClusters: () => set((state) => ({ showClusters: !state.showClusters })),
-  toggleWatchboxes: () => set((state) => ({ showWatchboxes: !state.showWatchboxes })),
-  toggleMilitaryBases: () => set((state) => ({ showMilitaryBases: !state.showMilitaryBases })),
-  toggleAircraft: () => set((state) => ({ showAircraft: !state.showAircraft })),
-  toggleSeismic: () => set((state) => ({ showSeismic: !state.showSeismic })),
-  toggleTraffic: () => set((state) => ({ showTraffic: !state.showTraffic })),
-  toggleNYCCameras: () => set((state) => ({ showNYCCameras: !state.showNYCCameras })),
-  toggleFAACameras: () => set((state) => ({ showFAACameras: !state.showFAACameras })),
-  toggleMaritime: () => set((state) => ({ showMaritime: !state.showMaritime })),
-  toggleFire: () => set((state) => ({ showFire: !state.showFire })),
-  setVisualMode: (mode) => set({ visualMode: mode }),
+  toggleHeatmap:       () => set((s) => ({ showHeatmap:       !s.showHeatmap })),
+  toggleClusters:      () => set((s) => ({ showClusters:      !s.showClusters })),
+  toggleWatchboxes:    () => set((s) => ({ showWatchboxes:    !s.showWatchboxes })),
+  toggleMilitaryBases: () => set((s) => ({ showMilitaryBases: !s.showMilitaryBases })),
+  toggleAircraft:      () => set((s) => ({ showAircraft:      !s.showAircraft })),
+  toggleSeismic:       () => set((s) => ({ showSeismic:       !s.showSeismic })),
+  toggleTraffic:       () => set((s) => ({ showTraffic:       !s.showTraffic })),
+  toggleNYCCameras:    () => set((s) => ({ showNYCCameras:    !s.showNYCCameras })),
+  toggleFAACameras:    () => set((s) => ({ showFAACameras:    !s.showFAACameras })),
+  toggleMaritime:      () => set((s) => ({ showMaritime:      !s.showMaritime })),
+  toggleFire:          () => set((s) => ({ showFire:          !s.showFire })),
+  toggleSatellite:     () => set((s) => ({ showSatellite:     !s.showSatellite })),
+
+  setSatelliteDate:    (date)    => set({ satelliteDate:    date }),
+  setSatelliteSource:  (source)  => set({ satelliteSource:  source }),
+  setSatelliteOpacity: (opacity) => set({ satelliteOpacity: opacity }),
+  setVisualMode:       (mode)    => set({ visualMode:       mode }),
 
   startDrawingWatchbox: () => set({ isDrawingWatchbox: true }),
-  stopDrawingWatchbox: () => set({ isDrawingWatchbox: false }),
-  setActiveWatchbox: (id) => set({ activeWatchboxId: id }),
-  startAutoPlay: () => set({ isAutoPlaying: true }),
-  stopAutoPlay: () => set({ isAutoPlaying: false }),
+  stopDrawingWatchbox:  () => set({ isDrawingWatchbox: false }),
+  setActiveWatchbox:    (id) => set({ activeWatchboxId: id }),
+  startAutoPlay:        () => set({ isAutoPlaying: true }),
+  stopAutoPlay:         () => set({ isAutoPlaying: false }),
 
   setEntityLocations: (entityName, locations) =>
     set({ entityLocations: locations.map((loc) => ({ ...loc, entityName })) }),
   clearEntityLocations: () => set({ entityLocations: [] }),
 
-  setMilitaryBases: (bases) => set({ militaryBases: bases }),
+  setMilitaryBases:        (bases)   => set({ militaryBases: bases }),
   setMilitaryBasesLoading: (loading) => set({ militaryBasesLoading: loading }),
-  setAircraft: (aircraft) => set({ aircraft }),
-  setAircraftLoading: (loading) => set({ aircraftLoading: loading }),
-  setEarthquakes: (earthquakes) => set({ earthquakes }),
-  setSeismicLoading: (loading) => set({ seismicLoading: loading }),
-  setCameras: (cameras) => set({ cameras }),
-  setCamerasLoading: (loading) => set({ camerasLoading: loading }),
+  setAircraft:             (aircraft) => set({ aircraft }),
+  setAircraftLoading:      (loading)  => set({ aircraftLoading: loading }),
+  setEarthquakes:          (earthquakes) => set({ earthquakes }),
+  setSeismicLoading:       (loading)     => set({ seismicLoading: loading }),
+  setCameras:              (cameras) => set({ cameras }),
+  setCamerasLoading:       (loading) => set({ camerasLoading: loading }),
 
   upsertVessel: (vessel) =>
     set((state) => {
-      const existing = state.vessels.findIndex((v) => v.mmsi === vessel.mmsi);
-      if (existing >= 0) {
+      const idx = state.vessels.findIndex((v) => v.mmsi === vessel.mmsi);
+      if (idx >= 0) {
         const updated = [...state.vessels];
-        updated[existing] = vessel;
+        updated[idx] = vessel;
         return { vessels: updated };
       }
-      // Cap at 2000 vessels to avoid performance issues
       const next = state.vessels.length >= 2000
         ? [...state.vessels.slice(-1999), vessel]
         : [...state.vessels, vessel];
       return { vessels: next };
     }),
 
-  clearVessels: () => set({ vessels: [] }),
-  setMaritimeConnected: (connected) => set({ maritimeConnected: connected }),
+  clearVessels:          () => set({ vessels: [] }),
+  setMaritimeConnected:  (connected) => set({ maritimeConnected: connected }),
 }));

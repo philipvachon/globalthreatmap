@@ -5,7 +5,7 @@ import { useMapStore, type VisualMode } from "@/stores/map-store";
 import {
   Layers, ChevronLeft,
   Flame, Dot, Shield, PlaneTakeoff, Activity, TrafficCone,
-  Camera, CloudRain, Anchor, Zap,
+  Camera, CloudRain, Anchor, Zap, Satellite,
   Monitor, Tv2, Eye, Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -75,6 +75,7 @@ export function LayerPanel() {
     showTraffic,      toggleTraffic,
     showNYCCameras,   toggleNYCCameras,
     showFAACameras,   toggleFAACameras,
+    showSatellite,    toggleSatellite,
     aircraftLoading, seismicLoading, camerasLoading, maritimeConnected,
     visualMode, setVisualMode,
   } = useMapStore();
@@ -156,6 +157,19 @@ export function LayerPanel() {
             icon={<CloudRain className="h-3.5 w-3.5" />}
             iconColor="text-indigo-400"
             loading={camerasLoading && showFAACameras}
+          />
+        </div>
+
+        {/* ── Imagery ──────────────────────────────── */}
+        <SectionLabel label="Imagery" />
+        <div className="px-1 space-y-0.5">
+          <ToggleRow
+            label="Satellite (GIBS)"
+            active={showSatellite}
+            onToggle={toggleSatellite}
+            icon={<Satellite className="h-3.5 w-3.5" />}
+            iconColor="text-violet-400"
+            badge="NASA"
           />
         </div>
 

@@ -22,6 +22,7 @@ import { useMaritime } from "@/hooks/use-maritime";
 import { threatLevelColors } from "@/types";
 import { EventPopup } from "./event-popup";
 import { CameraPopup } from "./camera-popup";
+import { gibsTileUrl, SATELLITE_MIN_ZOOM } from "./satellite-controls";
 import { CountryConflictsModal } from "./country-conflicts-modal";
 import { SignInModal } from "@/components/auth/sign-in-modal";
 import { hasReachedLimit, incrementCountryClicks } from "@/lib/usage-limits";
@@ -318,6 +319,7 @@ export function ThreatMap() {
     showNYCCameras, showFAACameras, cameras,
     showMaritime, vessels,
     showFire,
+    showSatellite, satelliteDate, satelliteSource, satelliteOpacity,
     visualMode,
   } = useMapStore();
 
@@ -450,6 +452,13 @@ export function ThreatMap() {
   // Fire tile URL (memoized once per render cycle — date won't change during session)
   const fireTileUrl = useMemo(() => gibasFireTileUrl(), []);
 
+  // Satellite tile URL — depends on source and date; key forces source remount on change
+  const satelliteTileUrl = useMemo(
+    () => gibsTileUrl(satelliteSource, satelliteDate),
+    [satelliteSource, satelliteDate]
+  );
+  const satelliteSourceKey = `gibs-${satelliteSource}-${satelliteDate}`;
+
   // ─── Interactive layer ids ───────────────────────────────────────────────────
 
   const interactiveLayerIds = useMemo(() => {
@@ -571,7 +580,29 @@ export function ThreatMap() {
           <GeolocateControl position="top-right" />
           <ScaleControl position="bottom-right" />
 
-          {/* NASA GIBS fire raster (rendered first so it's beneath everything) */}
+          {/* NASA GIBS satellite imagery — bottom of stack, zoom-gated */}
+          {showSatellite && viewport.zoom >= SATELLITE_MIN_ZOOM && (
+            <Source
+              key={satelliteSourceKey}
+              id="satellite-gibs"
+              type="raster"
+              tiles={[satelliteTileUrl]}
+              tileSize={256}
+              maxzoom={9}
+            >
+              <Layer
+                id="satellite-layer"
+                type="raster"
+                paint={{
+                  "raster-opacity": satelliteOpacity,
+                  "raster-fade-duration": 500,
+                  "raster-resampling": "linear",
+                }}
+              />
+            </Source>
+          )}
+
+          {/* NASA GIBS fire raster */}
           {showFire && (
             <Source id="nasa-fire" type="raster" tiles={[fireTileUrl]} tileSize={256} minzoom={0} maxzoom={8}>
               <Layer {...fireRasterLayer} />

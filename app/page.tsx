@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/sidebar";
 import { ThreatMap } from "@/components/map/threat-map";
 import { TimelineScrubber } from "@/components/map/timeline-scrubber";
 import { LayerPanel } from "@/components/map/layer-panel";
+import { SatelliteControls } from "@/components/map/satellite-controls";
 import { WelcomeModal } from "@/components/welcome-modal";
 import { SignInPanel, SignInModal } from "@/components/auth";
 import { PolymarketTicker, POLYMARKET_TICKER_HEIGHT } from "@/components/polymarket-ticker";
@@ -18,36 +19,36 @@ export default function Home() {
   const [showSignInModal, setShowSignInModal] = useState(false);
   const { isLoading, refresh, requiresSignIn } = useEvents({
     autoRefresh: true,
-    refreshInterval: 300000, // 5 minutes
+    refreshInterval: 300000,
   });
 
   useEffect(() => {
     const dismissed = localStorage.getItem(WELCOME_DISMISSED_KEY);
-    if (!dismissed) {
-      setShowWelcome(true);
-    }
+    if (!dismissed) setShowWelcome(true);
   }, []);
 
   useEffect(() => {
-    if (requiresSignIn) {
-      setShowSignInModal(true);
-    }
+    if (requiresSignIn) setShowSignInModal(true);
   }, [requiresSignIn]);
 
   return (
     <div className="flex h-screen flex-col" style={{ paddingBottom: POLYMARKET_TICKER_HEIGHT }}>
-      <Header
-        onRefresh={refresh}
-        isLoading={isLoading}
-        onShowHelp={() => setShowWelcome(true)}
-      />
+      <Header onRefresh={refresh} isLoading={isLoading} onShowHelp={() => setShowWelcome(true)} />
       <div className="flex flex-1 overflow-hidden">
         <div className="relative flex-1">
           <ThreatMap />
-          {/* Layer control panel — top-left, below header */}
+
+          {/* Layer control panel — top-left */}
           <div className="absolute left-4 top-4 z-10">
             <LayerPanel />
           </div>
+
+          {/* Satellite date scrubber — bottom-center, above auto-pan button */}
+          <div className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2">
+            <SatelliteControls />
+          </div>
+
+          {/* Auto-pan toggle — bottom-left */}
           <TimelineScrubber />
         </div>
         <Sidebar />

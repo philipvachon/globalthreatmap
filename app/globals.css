@@ -269,6 +269,44 @@ body {
   animation: pulse-threat 2s ease-in-out infinite;
 }
 
+/* ── Satellite date-scrubber range input ─────────────────────────────────── */
+
+.satellite-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  background: var(--color-muted);
+  border-radius: 9999px;
+  outline: none;
+  cursor: pointer;
+}
+
+.satellite-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #a78bfa;
+  border: 2px solid var(--color-card);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.satellite-slider::-webkit-slider-thumb:hover {
+  background: #c4b5fd;
+}
+
+.satellite-slider::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #a78bfa;
+  border: 2px solid var(--color-card);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
 /* ── Visual Mode Shaders ─────────────────────────────────────────────────── */
 
 /* CRT phosphor scanline overlay */
