@@ -79,6 +79,13 @@ interface MapState {
   showFAACameras: boolean;
   showMaritime: boolean;
   showFire: boolean;
+  showWeather: boolean;
+  weatherPath: string | null;   // RainViewer tile path prefix, e.g. "/v2/radar/1234567890"
+  weatherHost: string;          // RainViewer tile host
+  showAlerts: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  alertsFeatures: any[];        // raw NWS GeoJSON feature objects
+  alertsLoading: boolean;
   showSatellite: boolean;
   satelliteDate: string;
   satelliteSource: SatelliteSource;
@@ -112,6 +119,12 @@ interface MapState {
   toggleFAACameras: () => void;
   toggleMaritime: () => void;
   toggleFire: () => void;
+  toggleWeather: () => void;
+  toggleAlerts: () => void;
+  setWeatherData: (path: string, host: string) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  setAlertsFeatures: (features: any[]) => void;
+  setAlertsLoading: (loading: boolean) => void;
   toggleSatellite: () => void;
   setSatelliteDate: (date: string) => void;
   setSatelliteSource: (source: SatelliteSource) => void;
@@ -158,6 +171,12 @@ export const useMapStore = create<MapState>((set) => ({
   showFAACameras: false,
   showMaritime: false,
   showFire: false,
+  showWeather: false,
+  weatherPath: null,
+  weatherHost: "https://tilecache.rainviewer.com",
+  showAlerts: false,
+  alertsFeatures: [],
+  alertsLoading: false,
   showSatellite: false,
   satelliteDate: getYesterday(),
   satelliteSource: "modis-terra",
@@ -195,6 +214,11 @@ export const useMapStore = create<MapState>((set) => ({
   toggleFAACameras:    () => set((s) => ({ showFAACameras:    !s.showFAACameras })),
   toggleMaritime:      () => set((s) => ({ showMaritime:      !s.showMaritime })),
   toggleFire:          () => set((s) => ({ showFire:          !s.showFire })),
+  toggleWeather:       () => set((s) => ({ showWeather:       !s.showWeather })),
+  toggleAlerts:        () => set((s) => ({ showAlerts:        !s.showAlerts })),
+  setWeatherData:      (path, host) => set({ weatherPath: path, weatherHost: host }),
+  setAlertsFeatures:   (features) => set({ alertsFeatures: features }),
+  setAlertsLoading:    (loading)  => set({ alertsLoading: loading }),
   toggleSatellite:     () => set((s) => ({ showSatellite:     !s.showSatellite })),
 
   setSatelliteDate:    (date)    => set({ satelliteDate:    date }),

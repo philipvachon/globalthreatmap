@@ -7,6 +7,7 @@ import {
   Flame, Dot, Shield, PlaneTakeoff, Activity, TrafficCone,
   Camera, CloudRain, Anchor, Zap, Satellite,
   Monitor, Tv2, Eye, Moon,
+  Radar, TriangleAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -76,7 +77,9 @@ export function LayerPanel() {
     showNYCCameras,   toggleNYCCameras,
     showFAACameras,   toggleFAACameras,
     showSatellite,    toggleSatellite,
-    aircraftLoading, seismicLoading, camerasLoading, maritimeConnected,
+    showWeather,      toggleWeather,
+    showAlerts,       toggleAlerts,
+    aircraftLoading, seismicLoading, camerasLoading, maritimeConnected, alertsLoading,
     visualMode, setVisualMode,
   } = useMapStore();
 
@@ -176,8 +179,10 @@ export function LayerPanel() {
         {/* ── Environment ──────────────────────────── */}
         <SectionLabel label="Environment" />
         <div className="px-1 space-y-0.5">
-          <ToggleRow label="Seismic"      active={showSeismic} onToggle={toggleSeismic} icon={<Activity className="h-3.5 w-3.5" />} iconColor="text-yellow-400" loading={seismicLoading} />
-          <ToggleRow label="Fire/VIIRS"   active={showFire}    onToggle={toggleFire}    icon={<Zap      className="h-3.5 w-3.5" />} iconColor="text-red-400" badge="NASA" />
+          <ToggleRow label="Seismic"      active={showSeismic} onToggle={toggleSeismic} icon={<Activity       className="h-3.5 w-3.5" />} iconColor="text-yellow-400" loading={seismicLoading} />
+          <ToggleRow label="Fire/VIIRS"   active={showFire}    onToggle={toggleFire}    icon={<Zap            className="h-3.5 w-3.5" />} iconColor="text-red-400"    badge="NASA" />
+          <ToggleRow label="Weather Radar" active={showWeather} onToggle={toggleWeather} icon={<Radar          className="h-3.5 w-3.5" />} iconColor="text-cyan-400" />
+          <ToggleRow label="NWS Alerts"   active={showAlerts}  onToggle={toggleAlerts}  icon={<TriangleAlert  className="h-3.5 w-3.5" />} iconColor="text-amber-400" loading={alertsLoading} badge="US" />
         </div>
 
         {/* ── View Mode ────────────────────────────── */}

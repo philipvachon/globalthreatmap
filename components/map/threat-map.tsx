@@ -19,6 +19,8 @@ import { useAircraft } from "@/hooks/use-aircraft";
 import { useSeismic } from "@/hooks/use-seismic";
 import { useCameras } from "@/hooks/use-cameras";
 import { useMaritime } from "@/hooks/use-maritime";
+import { useWeather } from "@/hooks/use-weather";
+import { useAlerts } from "@/hooks/use-alerts";
 import { threatLevelColors } from "@/types";
 import { EventPopup } from "./event-popup";
 import { CameraPopup } from "./camera-popup";
@@ -281,6 +283,51 @@ const fireRasterLayer: LayerProps = {
   },
 };
 
+// RainViewer weather radar raster overlay
+const weatherRadarLayer: LayerProps = {
+  id: "weather-radar-layer",
+  type: "raster",
+  paint: {
+    "raster-opacity": 0.65,
+    "raster-fade-duration": 300,
+  },
+};
+
+// NWS weather alert polygons — filled + outlined, color-coded by severity
+const alertsFillLayer: LayerProps = {
+  id: "alerts-fill",
+  type: "fill",
+  paint: {
+    "fill-color": [
+      "match", ["get", "severity"],
+      "Extreme", "#ef4444",
+      "Severe",  "#f97316",
+      "Moderate","#eab308",
+      "Minor",   "#3b82f6",
+      "#6b7280",
+    ],
+    "fill-opacity": 0.18,
+  },
+};
+
+const alertsLineLayer: LayerProps = {
+  id: "alerts-outline",
+  type: "line",
+  paint: {
+    "line-color": [
+      "match", ["get", "severity"],
+      "Extreme", "#ef4444",
+      "Severe",  "#f97316",
+      "Moderate","#eab308",
+      "Minor",   "#3b82f6",
+      "#6b7280",
+    ],
+    "line-width": 1.5,
+    "line-opacity": 0.85,
+    "line-dasharray": [2, 1],
+  },
+};
+
 // ─── Visual mode CSS filters ──────────────────────────────────────────────────
 
 const VISUAL_FILTERS: Record<string, string> = {
@@ -302,6 +349,7 @@ type SelectedAircraft       = { longitude: number; latitude: number; callsign: s
 type SelectedEarthquake     = { longitude: number; latitude: number; magnitude: number; place: string; time: number; depth: number };
 type SelectedCamera         = { longitude: number; latitude: number; id: string };
 type SelectedVessel         = { longitude: number; latitude: number; mmsi: string; name: string; type: string; speed: number; heading: number; destination?: string };
+type SelectedAlert          = { longitude: number; latitude: number; event: string; severity: string; urgency: string; areaDesc: string; headline?: string; ends?: string };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -319,6 +367,8 @@ export function ThreatMap() {
     showNYCCameras, showFAACameras, cameras,
     showMaritime, vessels,
     showFire,
+    showWeather, weatherPath, weatherHost,
+    showAlerts, alertsFeatures,
     showSatellite, satelliteDate, satelliteSource, satelliteOpacity,
     visualMode,
   } = useMapStore();
@@ -331,6 +381,8 @@ export function ThreatMap() {
   useSeismic();
   useCameras();
   useMaritime();
+  useWeather();
+  useAlerts();
 
   const [selEntity, setSelEntity]     = useState<SelectedEntityLocation | null>(null);
   const [selBase, setSelBase]         = useState<SelectedMilitaryBase | null>(null);
@@ -338,6 +390,7 @@ export function ThreatMap() {
   const [selQuake, setSelQuake]       = useState<SelectedEarthquake | null>(null);
   const [selCamera, setSelCamera]     = useState<SelectedCamera | null>(null);
   const [selVessel, setSelVessel]     = useState<SelectedVessel | null>(null);
+  const [selAlert, setSelAlert]       = useState<SelectedAlert | null>(null);
   const [selCountry, setSelCountry]   = useState<string | null>(null);
   const [selCountryCode, setSelCountryCode] = useState<string | null>(null);
   const [isCountryLoading, setIsCountryLoading] = useState(false);
@@ -379,6 +432,7 @@ export function ThreatMap() {
     setSelQuake(null);
     setSelCamera(null);
     setSelVessel(null);
+    setSelAlert(null);
   }
 
   // ─── GeoJSON memos ──────────────────────────────────────────────────────────
@@ -449,6 +503,18 @@ export function ThreatMap() {
     })),
   }), [vessels]);
 
+  // Alerts GeoJSON — build FeatureCollection from stored features
+  const alertsGeoJSON = useMemo(() => ({
+    type: "FeatureCollection" as const,
+    features: alertsFeatures,
+  }), [alertsFeatures]);
+
+  // Weather radar tile URL — RainViewer path + host; key forces source remount on update
+  const weatherTileUrl = weatherPath
+    ? `${weatherHost}${weatherPath}/256/{z}/{x}/{y}/4/1_1.png`
+    : null;
+  const weatherSourceKey = `rainviewer-${weatherPath ?? "none"}`;
+
   // Fire tile URL (memoized once per render cycle — date won't change during session)
   const fireTileUrl = useMemo(() => gibasFireTileUrl(), []);
 
@@ -469,8 +535,9 @@ export function ThreatMap() {
     if (showNYCCameras) ids.push("nyc-cameras");
     if (showFAACameras) ids.push("faa-cameras");
     if (showMaritime) ids.push("vessel-points");
+    if (showAlerts) ids.push("alerts-fill");
     return ids;
-  }, [showClusters, showAircraft, showSeismic, showNYCCameras, showFAACameras, showMaritime]);
+  }, [showClusters, showAircraft, showSeismic, showNYCCameras, showFAACameras, showMaritime, showAlerts]);
 
   // ─── Map click handler ───────────────────────────────────────────────────────
 
@@ -519,6 +586,11 @@ export function ThreatMap() {
       }
       if (lid === "vessel-points") {
         setSelVessel({ longitude: coords[0], latitude: coords[1], mmsi: props.mmsi, name: props.name, type: props.type, speed: props.speed, heading: props.heading, destination: props.destination });
+        return;
+      }
+      if (lid === "alerts-fill") {
+        // Use click lngLat as anchor since alerts are polygons
+        setSelAlert({ longitude: event.lngLat.lng, latitude: event.lngLat.lat, event: props.event, severity: props.severity, urgency: props.urgency, areaDesc: props.areaDesc, headline: props.headline, ends: props.ends });
         return;
       }
       return;
@@ -606,6 +678,29 @@ export function ThreatMap() {
           {showFire && (
             <Source id="nasa-fire" type="raster" tiles={[fireTileUrl]} tileSize={256} minzoom={0} maxzoom={8}>
               <Layer {...fireRasterLayer} />
+            </Source>
+          )}
+
+          {/* RainViewer weather radar raster */}
+          {showWeather && weatherTileUrl && (
+            <Source
+              key={weatherSourceKey}
+              id="weather-radar"
+              type="raster"
+              tiles={[weatherTileUrl]}
+              tileSize={256}
+              minzoom={0}
+              maxzoom={12}
+            >
+              <Layer {...weatherRadarLayer} />
+            </Source>
+          )}
+
+          {/* NWS weather alert polygons */}
+          {showAlerts && alertsFeatures.length > 0 && (
+            <Source id="nws-alerts" type="geojson" data={alertsGeoJSON}>
+              <Layer {...alertsFillLayer} />
+              <Layer {...alertsLineLayer} />
             </Source>
           )}
 
@@ -812,6 +907,42 @@ export function ThreatMap() {
                   <div className="flex justify-between"><span>Heading</span><span className="text-foreground">{selVessel.heading}°</span></div>
                   {selVessel.destination && (
                     <div className="flex justify-between"><span>Destination</span><span className="text-foreground truncate max-w-[100px]">{selVessel.destination}</span></div>
+                  )}
+                </div>
+              </div>
+            </Popup>
+          )}
+
+          {selAlert && (
+            <Popup longitude={selAlert.longitude} latitude={selAlert.latitude}
+              anchor="bottom" onClose={() => setSelAlert(null)} closeButton closeOnClick={false} className="threat-popup">
+              <div className="min-w-[240px] p-2">
+                <div className="mb-2 flex items-center gap-2">
+                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold
+                    ${ selAlert.severity === "Extreme"  ? "bg-red-500/20 text-red-400"
+                     : selAlert.severity === "Severe"   ? "bg-orange-500/20 text-orange-400"
+                     : selAlert.severity === "Moderate" ? "bg-yellow-500/20 text-yellow-400"
+                     : "bg-blue-500/20 text-blue-400"}`}>
+                    {selAlert.severity?.slice(0, 3).toUpperCase() ?? "NWS"}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold">{selAlert.event}</h3>
+                    <span className={`text-xs
+                      ${ selAlert.severity === "Extreme"  ? "text-red-400"
+                       : selAlert.severity === "Severe"   ? "text-orange-400"
+                       : selAlert.severity === "Moderate" ? "text-yellow-400"
+                       : "text-blue-400"}`}>
+                      {selAlert.severity} · {selAlert.urgency}
+                    </span>
+                  </div>
+                </div>
+                {selAlert.headline && (
+                  <p className="mb-1.5 text-xs text-foreground leading-snug">{selAlert.headline}</p>
+                )}
+                <div className="space-y-1 text-xs text-muted-foreground">
+                  <div className="flex gap-1"><span className="shrink-0">Area:</span><span className="text-foreground line-clamp-2">{selAlert.areaDesc}</span></div>
+                  {selAlert.ends && (
+                    <div className="flex gap-1"><span className="shrink-0">Expires:</span><span className="text-foreground">{new Date(selAlert.ends).toUTCString().slice(5, 22)}</span></div>
                   )}
                 </div>
               </div>
