@@ -3,74 +3,79 @@
 import { useState } from "react";
 import { useMapStore, type VisualMode } from "@/stores/map-store";
 import {
-  Layers,
-  ChevronLeft,
-  Flame,
-  Dot,
-  Shield,
-  PlaneTakeoff,
-  Activity,
-  TrafficCone,
-  Monitor,
-  Eye,
-  Moon,
-  Tv2,
+  Layers, ChevronLeft,
+  Flame, Dot, Shield, PlaneTakeoff, Activity, TrafficCone,
+  Camera, CloudRain, Anchor, Zap,
+  Monitor, Tv2, Eye, Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface LayerToggleProps {
+interface ToggleRowProps {
   label: string;
   active: boolean;
   onToggle: () => void;
   icon: React.ReactNode;
-  color?: string;
+  iconColor: string;
   loading?: boolean;
+  badge?: string;
 }
 
-function LayerToggle({ label, active, onToggle, icon, color = "text-primary", loading }: LayerToggleProps) {
+function ToggleRow({ label, active, onToggle, icon, iconColor, loading, badge }: ToggleRowProps) {
   return (
     <button
       onClick={onToggle}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded px-2 py-1.5 text-xs transition-colors",
+        "flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs transition-colors text-left",
         active
           ? "bg-primary/15 text-foreground"
-          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
       )}
     >
-      <span className={cn("shrink-0", active ? color : "text-muted-foreground")}>
+      <span className={cn("shrink-0 w-3.5", active ? iconColor : "text-muted-foreground/60")}>
         {icon}
       </span>
-      <span className="flex-1 text-left font-medium tracking-wide">{label}</span>
-      <span
-        className={cn(
-          "h-1.5 w-1.5 shrink-0 rounded-full",
-          loading ? "animate-pulse bg-yellow-400" : active ? "bg-green-400" : "bg-muted"
-        )}
-      />
+      <span className="flex-1 font-medium tracking-wide">{label}</span>
+      {badge && (
+        <span className="rounded bg-muted/60 px-1 py-px text-[9px] text-muted-foreground">{badge}</span>
+      )}
+      <span className={cn(
+        "h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
+        loading ? "animate-pulse bg-yellow-400" : active ? "bg-green-400" : "bg-muted"
+      )} />
     </button>
   );
 }
 
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <p className="px-2 pt-2 pb-0.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50">
+      {label}
+    </p>
+  );
+}
+
 const VISUAL_MODES: { id: VisualMode; label: string; icon: React.ReactNode }[] = [
-  { id: "normal", label: "STD", icon: <Monitor className="h-3 w-3" /> },
-  { id: "crt", label: "CRT", icon: <Tv2 className="h-3 w-3" /> },
-  { id: "nightvision", label: "NV", icon: <Moon className="h-3 w-3" /> },
-  { id: "flir", label: "FLIR", icon: <Eye className="h-3 w-3" /> },
+  { id: "normal",      label: "STD",  icon: <Monitor className="h-3 w-3" /> },
+  { id: "crt",         label: "CRT",  icon: <Tv2     className="h-3 w-3" /> },
+  { id: "nightvision", label: "NV",   icon: <Moon    className="h-3 w-3" /> },
+  { id: "flir",        label: "FLIR", icon: <Eye     className="h-3 w-3" /> },
 ];
 
 export function LayerPanel() {
   const [collapsed, setCollapsed] = useState(false);
 
   const {
-    showHeatmap, toggleHeatmap,
-    showClusters, toggleClusters,
+    showHeatmap,      toggleHeatmap,
+    showClusters,     toggleClusters,
     showMilitaryBases, toggleMilitaryBases,
-    showAircraft, toggleAircraft,
-    showSeismic, toggleSeismic,
-    showTraffic, toggleTraffic,
-    aircraftLoading,
-    seismicLoading,
+    showAircraft,     toggleAircraft,
+    showMaritime,     toggleMaritime,
+    showSeismic,      toggleSeismic,
+    showFire,         toggleFire,
+    showTraffic,      toggleTraffic,
+    showNYCCameras,   toggleNYCCameras,
+    showFAACameras,   toggleFAACameras,
+    aircraftLoading, seismicLoading, camerasLoading, maritimeConnected,
     visualMode, setVisualMode,
   } = useMapStore();
 
@@ -87,94 +92,103 @@ export function LayerPanel() {
   }
 
   return (
-    <div className="w-44 rounded border border-border bg-card/95 shadow-lg backdrop-blur-sm">
+    <div className="w-48 rounded border border-border bg-card/96 shadow-xl backdrop-blur-sm select-none">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-2 py-1.5">
-        <div className="flex items-center gap-1.5 text-xs font-semibold tracking-widest text-muted-foreground uppercase">
-          <Layers className="h-3 w-3" />
-          Layers
-        </div>
+        <span className="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+          <Layers className="h-3 w-3" /> Layers
+        </span>
         <button
           onClick={() => setCollapsed(true)}
-          className="text-muted-foreground transition-colors hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground transition-colors"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      {/* Data Layers */}
-      <div className="px-1.5 py-1.5 space-y-0.5">
-        <p className="px-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-          Data
-        </p>
-        <LayerToggle
-          label="Event Clusters"
-          active={showClusters}
-          onToggle={toggleClusters}
-          icon={<Dot className="h-3.5 w-3.5" />}
-          color="text-blue-400"
-        />
-        <LayerToggle
-          label="Heat Map"
-          active={showHeatmap}
-          onToggle={toggleHeatmap}
-          icon={<Flame className="h-3.5 w-3.5" />}
-          color="text-orange-400"
-        />
-        <LayerToggle
-          label="Military Bases"
-          active={showMilitaryBases}
-          onToggle={toggleMilitaryBases}
-          icon={<Shield className="h-3.5 w-3.5" />}
-          color="text-green-400"
-        />
-        <LayerToggle
-          label="ADS-B Aircraft"
-          active={showAircraft}
-          onToggle={toggleAircraft}
-          icon={<PlaneTakeoff className="h-3.5 w-3.5" />}
-          color="text-sky-400"
-          loading={aircraftLoading}
-        />
-        <LayerToggle
-          label="Seismic"
-          active={showSeismic}
-          onToggle={toggleSeismic}
-          icon={<Activity className="h-3.5 w-3.5" />}
-          color="text-yellow-400"
-          loading={seismicLoading}
-        />
-        <LayerToggle
-          label="Live Traffic"
-          active={showTraffic}
-          onToggle={toggleTraffic}
-          icon={<TrafficCone className="h-3.5 w-3.5" />}
-          color="text-emerald-400"
-        />
-      </div>
+      <div className="pb-1.5">
+        {/* ── Events ──────────────────────────────── */}
+        <SectionLabel label="Events" />
+        <div className="px-1 space-y-0.5">
+          <ToggleRow label="Clusters"   active={showClusters}   onToggle={toggleClusters}   icon={<Dot      className="h-3.5 w-3.5" />} iconColor="text-blue-400" />
+          <ToggleRow label="Heat Map"   active={showHeatmap}    onToggle={toggleHeatmap}    icon={<Flame    className="h-3.5 w-3.5" />} iconColor="text-orange-400" />
+        </div>
 
-      {/* Visual Mode */}
-      <div className="border-t border-border px-1.5 py-1.5">
-        <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-          View Mode
-        </p>
-        <div className="grid grid-cols-4 gap-1">
-          {VISUAL_MODES.map(({ id, label, icon }) => (
-            <button
-              key={id}
-              onClick={() => setVisualMode(id)}
-              className={cn(
-                "flex flex-col items-center gap-0.5 rounded px-1 py-1.5 text-[10px] font-medium transition-colors",
-                visualMode === id
-                  ? "bg-primary/20 text-foreground"
-                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-              )}
-              title={id.charAt(0).toUpperCase() + id.slice(1)}
-            >
-              {icon}
-              {label}
-            </button>
-          ))}
+        {/* ── Tracking ────────────────────────────── */}
+        <SectionLabel label="Tracking" />
+        <div className="px-1 space-y-0.5">
+          <ToggleRow
+            label="ADS-B Aircraft"
+            active={showAircraft}
+            onToggle={toggleAircraft}
+            icon={<PlaneTakeoff className="h-3.5 w-3.5" />}
+            iconColor="text-sky-400"
+            loading={aircraftLoading}
+          />
+          <ToggleRow
+            label="Maritime AIS"
+            active={showMaritime}
+            onToggle={toggleMaritime}
+            icon={<Anchor className="h-3.5 w-3.5" />}
+            iconColor="text-blue-400"
+            loading={showMaritime && !maritimeConnected}
+            badge={!process.env.NEXT_PUBLIC_AISSTREAM_API_KEY ? "key" : undefined}
+          />
+          <ToggleRow label="Traffic"       active={showTraffic}      onToggle={toggleTraffic}      icon={<TrafficCone className="h-3.5 w-3.5" />} iconColor="text-emerald-400" />
+          <ToggleRow label="Military Bases" active={showMilitaryBases} onToggle={toggleMilitaryBases} icon={<Shield className="h-3.5 w-3.5" />}  iconColor="text-green-400" />
+        </div>
+
+        {/* ── Surveillance ─────────────────────────── */}
+        <SectionLabel label="Surveillance" />
+        <div className="px-1 space-y-0.5">
+          <ToggleRow
+            label="NYC Cameras"
+            active={showNYCCameras}
+            onToggle={toggleNYCCameras}
+            icon={<Camera className="h-3.5 w-3.5" />}
+            iconColor="text-teal-400"
+            loading={camerasLoading && showNYCCameras}
+          />
+          <ToggleRow
+            label="FAA Cams"
+            active={showFAACameras}
+            onToggle={toggleFAACameras}
+            icon={<CloudRain className="h-3.5 w-3.5" />}
+            iconColor="text-indigo-400"
+            loading={camerasLoading && showFAACameras}
+          />
+        </div>
+
+        {/* ── Environment ──────────────────────────── */}
+        <SectionLabel label="Environment" />
+        <div className="px-1 space-y-0.5">
+          <ToggleRow label="Seismic"      active={showSeismic} onToggle={toggleSeismic} icon={<Activity className="h-3.5 w-3.5" />} iconColor="text-yellow-400" loading={seismicLoading} />
+          <ToggleRow label="Fire/VIIRS"   active={showFire}    onToggle={toggleFire}    icon={<Zap      className="h-3.5 w-3.5" />} iconColor="text-red-400" badge="NASA" />
+        </div>
+
+        {/* ── View Mode ────────────────────────────── */}
+        <div className="border-t border-border mt-1.5 pt-1.5 px-2">
+          <p className="pb-1 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50">
+            View Mode
+          </p>
+          <div className="grid grid-cols-4 gap-1">
+            {VISUAL_MODES.map(({ id, label, icon }) => (
+              <button
+                key={id}
+                onClick={() => setVisualMode(id)}
+                title={id.charAt(0).toUpperCase() + id.slice(1)}
+                className={cn(
+                  "flex flex-col items-center gap-0.5 rounded px-1 py-1.5 text-[10px] font-semibold transition-colors",
+                  visualMode === id
+                    ? "bg-primary/20 text-foreground"
+                    : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                )}
+              >
+                {icon}
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
