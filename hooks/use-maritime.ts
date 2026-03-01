@@ -39,8 +39,8 @@ export function useMaritime() {
         ws.send(
           JSON.stringify({
             APIKey: apiKey,
-            BoundingBoxes: [[-90, -180, 90, 180]],
-            FilterMessageTypes: ["PositionReport", "ShipStaticData"],
+            BoundingBoxes: [[[-90, -180], [90, 180]]],
+            FilterMessageTypes: ["PositionReport", "StandardClassBPositionReport", "ShipStaticData"],
           })
         );
       };
@@ -48,6 +48,18 @@ export function useMaritime() {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data as string);
+
+          // Detect server-side errors (e.g. invalid API key)
+          if (msg?.error) {
+            console.warn("[AISStream]", msg.error);
+            // Prevent auto-reconnect: null out onclose before closing
+            ws.onclose = null;
+            ws.close();
+            wsRef.current = null;
+            setMaritimeConnected(false);
+            return;
+          }
+
           const meta = msg?.MetaData;
           const lat = meta?.latitude ?? msg?.Message?.PositionReport?.Latitude;
           const lng = meta?.longitude ?? msg?.Message?.PositionReport?.Longitude;

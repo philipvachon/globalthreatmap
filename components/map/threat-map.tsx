@@ -23,6 +23,7 @@ import { useMaritime } from "@/hooks/use-maritime";
 import { useWeather } from "@/hooks/use-weather";
 import { useAlerts } from "@/hooks/use-alerts";
 import { useSatellites } from "@/hooks/use-satellites";
+import { useGoogle3DTiles } from "@/hooks/use-google-3d-tiles";
 import { SatelliteGlobeLayer, projectSatToScreen } from "@/components/map/satellite-globe-layer";
 import { twoline2satrec, propagate, gstime, eciToGeodetic, degreesLat, degreesLong } from "satellite.js";
 import { threatLevelColors } from "@/types";
@@ -161,6 +162,33 @@ const militaryBaseLabelLayer: LayerProps = {
     "text-halo-width": 1,
   },
 };
+
+// ── Aircraft type classification ──────────────────────────────────────────────
+// Heuristic based on ICAO callsign prefix — not 100% accurate but practical
+// without full Mode-S/ADS-B type code data from OpenSky free tier.
+const MILITARY_PREFIXES = new Set([
+  "RCH","REACH","EVAC","CALL","JAKE","HOMER","VVIP","USAF",
+  "NAVY","ARMY","USMC","CG","FORGE","COLT","MOOSE","BOXER",
+  "IRON","STEEL","ROCKY","HAWK","EAGLE","GHOST","REAPER",
+]);
+const CARGO_PREFIXES = new Set([
+  "FDX","UPS","GTI","CLX","ABX","ATN","PAC","SOO","MAS","DHL",
+  "ACI","NCR","TPA","AAF","VRE","KMF","SIL","CARGOLUX",
+]);
+
+function classifyAircraft(callsign: string): string {
+  const cs = callsign.toUpperCase().trim();
+  if (!cs) return "unknown";
+  const prefix3 = cs.slice(0, 3);
+  const prefix4 = cs.slice(0, 4);
+  if (MILITARY_PREFIXES.has(prefix3) || MILITARY_PREFIXES.has(prefix4)) return "military";
+  if (CARGO_PREFIXES.has(prefix3))     return "cargo";
+  // Commercial: 3-letter ICAO airline code followed by digits
+  if (/^[A-Z]{3}\d/.test(cs))          return "commercial";
+  // N-registered private (US general aviation)
+  if (/^N\d/.test(cs))                  return "private";
+  return "unknown";
+}
 
 const aircraftLayer: LayerProps = {
   id: "aircraft-points",
@@ -371,7 +399,7 @@ export function ThreatMap() {
     showHeatmap, showClusters,
     entityLocations,
     showMilitaryBases, militaryBases, setMilitaryBases, setMilitaryBasesLoading,
-    showAircraft, aircraft,
+    showAircraft, aircraft, hiddenAircraftTypes,
     showSeismic, earthquakes,
     showTraffic,
     showNYCCameras, showFAACameras, cameras,
@@ -379,10 +407,12 @@ export function ThreatMap() {
     showFire,
     showWeather, weatherPath, weatherHost,
     showAlerts, alertsFeatures,
-    showSatellites, satellitePositions,
+    showSatellites, satellitePositions, hiddenSatCategories,
     showSatellite, satelliteDate, satelliteSource, satelliteOpacity,
     visualMode,
     geolocatePin, setGeolocatePin,
+    sidebarCollapsed,
+    showSatelliteBase, showMapLabels, showGoogle3DTiles,
   } = useMapStore();
 
   const { filteredEvents, selectedEvent, selectEvent } = useEventsStore();
@@ -396,12 +426,20 @@ export function ThreatMap() {
   useWeather();
   useAlerts();
   useSatellites();
+  useGoogle3DTiles(mapRef, viewport.zoom, showGoogle3DTiles);
+
+  // Resize map canvas after sidebar expand/collapse animation finishes (300ms)
+  useEffect(() => {
+    const id = setTimeout(() => mapRef.current?.getMap()?.resize(), 310);
+    return () => clearTimeout(id);
+  }, [sidebarCollapsed]);
 
   const [selEntity, setSelEntity]     = useState<SelectedEntityLocation | null>(null);
   const [selBase, setSelBase]         = useState<SelectedMilitaryBase | null>(null);
   const [selAircraft, setSelAircraft] = useState<SelectedAircraft | null>(null);
   const [selQuake, setSelQuake]       = useState<SelectedEarthquake | null>(null);
   const [selCamera, setSelCamera]     = useState<SelectedCamera | null>(null);
+  const [cameraExpanded, setCameraExpanded] = useState(false);
   const [selVessel, setSelVessel]     = useState<SelectedVessel | null>(null);
   const [selAlert, setSelAlert]       = useState<SelectedAlert | null>(null);
   const [selSatellite, setSelSatellite] = useState<SelectedSatellite | null>(null);
@@ -439,30 +477,49 @@ export function ThreatMap() {
   }, [selCountryCode, isCountryLoading]);
 
   // ── Satellite globe layer lifecycle ──────────────────────────────────────
-  // Keep latestPositions ref in sync so the toggle effect can seed the layer
-  useEffect(() => { satPositionsRef.current = satellitePositions; }, [satellitePositions]);
+  // Filter visible satellite positions by hidden category set
+  const visibleSatPositions = useMemo(
+    () => hiddenSatCategories.length === 0
+      ? satellitePositions
+      : satellitePositions.filter((p) => !hiddenSatCategories.includes(p.category)),
+    [satellitePositions, hiddenSatCategories],
+  );
 
-  // Toggle: switch to globe projection + fog + custom 3-D layer
+  // Keep latestPositions ref in sync so the toggle effect can seed the layer
+  useEffect(() => { satPositionsRef.current = visibleSatPositions; }, [visibleSatPositions]);
+
+  // ── Always-on globe projection + atmosphere ──────────────────────────────
+  // Apply once on load, then re-apply after every style swap so the dark↔satellite
+  // base-map switch doesn't revert us back to mercator.
+  const handleMapLoad = useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+
+    const applyGlobe = () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (map as any).setProjection?.("globe");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (map as any).setFog?.({
+        "space-color":   "#000510",
+        "star-intensity": 0.5,
+        "color":         "rgba(10, 25, 60, 0.4)",
+        "high-color":    "#1a3a8a",
+        "horizon-blend":  0.06,
+        "range":         [0.5, 10],
+      });
+    };
+
+    applyGlobe();
+    map.on("style.load", applyGlobe);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Toggle: add/remove satellite custom 3-D WebGL layer
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
 
     if (showSatellites) {
-      // Globe projection gives the 3-D spherical view
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (map as any).setProjection?.("globe");
-
-      // Space environment fog
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (map as any).setFog?.({
-        "space-color":    "#000510",
-        "star-intensity":  0.5,
-        "color":          "rgba(10, 25, 60, 0.4)",
-        "high-color":     "#1a3a8a",
-        "horizon-blend":   0.06,
-        "range":          [0.5, 10],
-      });
-
       // Fly to globe overview if too zoomed in to see the sphere
       if (map.getZoom() > 4) {
         map.flyTo({ zoom: 1.5, duration: 1500, essential: true });
@@ -478,12 +535,6 @@ export function ThreatMap() {
         }
       }
     } else {
-      // Revert to flat Mercator
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (map as any).setProjection?.("mercator");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (map as any).setFog?.(null);
-
       if (satLayerRef.current && map.getLayer("satellite-3d-orbits")) {
         map.removeLayer("satellite-3d-orbits");
         satLayerRef.current = null;
@@ -494,10 +545,10 @@ export function ThreatMap() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showSatellites]);
 
-  // Forward position updates to the custom WebGL layer
+  // Forward position updates (respecting category filter) to the custom WebGL layer
   useEffect(() => {
-    satLayerRef.current?.setPositions(satellitePositions);
-  }, [satellitePositions]);
+    satLayerRef.current?.setPositions(visibleSatPositions);
+  }, [visibleSatPositions]);
 
   function clearPopups() {
     selectEvent(null);
@@ -542,12 +593,17 @@ export function ThreatMap() {
 
   const aircraftGeoJSON = useMemo(() => ({
     type: "FeatureCollection" as const,
-    features: aircraft.map((a) => ({
-      type: "Feature" as const,
-      properties: { icao24: a.icao24, callsign: a.callsign || a.icao24, originCountry: a.originCountry, altitude: a.altitude, velocity: a.velocity, heading: a.heading },
-      geometry: { type: "Point" as const, coordinates: [a.longitude, a.latitude] },
-    })),
-  }), [aircraft]);
+    features: aircraft
+      .filter((a) => {
+        if (hiddenAircraftTypes.length === 0) return true;
+        return !hiddenAircraftTypes.includes(classifyAircraft(a.callsign));
+      })
+      .map((a) => ({
+        type: "Feature" as const,
+        properties: { icao24: a.icao24, callsign: a.callsign || a.icao24, originCountry: a.originCountry, altitude: a.altitude, velocity: a.velocity, heading: a.heading },
+        geometry: { type: "Point" as const, coordinates: [a.longitude, a.latitude] },
+      })),
+  }), [aircraft, hiddenAircraftTypes]);
 
   const seismicGeoJSON = useMemo(() => ({
     type: "FeatureCollection" as const,
@@ -657,9 +713,9 @@ export function ThreatMap() {
         const cx = event.point.x;
         const cy = event.point.y;
         const HIT_PX = 14;
-        let closest: (typeof satellitePositions)[0] | null = null;
+        let closest: (typeof visibleSatPositions)[0] | null = null;
         let bestDist = HIT_PX;
-        for (const sat of satellitePositions) {
+        for (const sat of visibleSatPositions) {
           const sp = projectSatToScreen(map, sat.longitude, sat.latitude, sat.altKm);
           if (!sp) continue;
           const d = Math.hypot(sp.x - cx, sp.y - cy);
@@ -674,9 +730,10 @@ export function ThreatMap() {
             for (let min = 0; min <= 90; min += 2) {
               const t   = new Date(base + min * 60_000);
               const pv  = propagate(satrec, t);
-              if (!pv) continue;
+              if (!pv || !pv.position) continue;
               const gst = gstime(t);
-              const geo = eciToGeodetic(pv.position, gst);
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const geo = eciToGeodetic(pv.position as any, gst);
               const lat = degreesLat(geo.latitude);
               const lng = degreesLong(geo.longitude);
               if (isFinite(lat) && isFinite(lng)) track.push([lng, lat]);
@@ -733,6 +790,7 @@ export function ThreatMap() {
       }
       if (lid === "nyc-cameras" || lid === "faa-cameras") {
         setSelCamera({ longitude: coords[0], latitude: coords[1], id: props.id });
+        setCameraExpanded(false);
         return;
       }
       if (lid === "vessel-points") {
@@ -785,6 +843,15 @@ export function ThreatMap() {
   const showAnyCameras = showNYCCameras || showFAACameras;
   const cssFilter = VISUAL_FILTERS[visualMode] ?? "";
 
+  // Base map: dark by default; switches to satellite when enabled and zoom ≥ 10.
+  // showMapLabels controls whether satellite-streets (labels/POIs) or pure
+  // satellite-v9 (no labels) is used when the satellite base map is active.
+  const mapStyle = showSatelliteBase && viewport.zoom >= 10
+    ? showMapLabels
+      ? "mapbox://styles/mapbox/satellite-streets-v12"
+      : "mapbox://styles/mapbox/satellite-v9"
+    : "mapbox://styles/mapbox/dark-v11";
+
   return (
     <div className={`relative h-full w-full visual-mode-${visualMode}`}>
       <div className="h-full w-full" style={{ filter: cssFilter }}>
@@ -792,7 +859,8 @@ export function ThreatMap() {
           ref={mapRef}
           {...viewport}
           onMove={(evt) => setViewport(evt.viewState)}
-          mapStyle="mapbox://styles/mapbox/dark-v11"
+          onLoad={handleMapLoad}
+          mapStyle={mapStyle}
           mapboxAccessToken={MAPBOX_TOKEN}
           interactiveLayerIds={interactiveLayerIds}
           onClick={handleMapClick}
@@ -898,7 +966,7 @@ export function ThreatMap() {
             {showHeatmap && <Layer {...heatmapLayer} />}
             {showClusters && <Layer {...clusterLayer} />}
             {showClusters && <Layer {...clusterCountLayer} />}
-            <Layer {...unclusteredPointLayer} />
+            {showClusters && <Layer {...unclusteredPointLayer} />}
           </Source>
 
           {/* Entity locations */}
@@ -1055,8 +1123,12 @@ export function ThreatMap() {
           {selCamera && popupCamera && (
             <Popup longitude={selCamera.longitude} latitude={selCamera.latitude}
               anchor="bottom" onClose={() => setSelCamera(null)} closeButton closeOnClick={false} className="threat-popup"
-              maxWidth="340px">
-              <CameraPopup camera={popupCamera} />
+              maxWidth={cameraExpanded ? "640px" : "340px"}>
+              <CameraPopup
+                camera={popupCamera}
+                expanded={cameraExpanded}
+                onToggleExpand={() => setCameraExpanded((e) => !e)}
+              />
             </Popup>
           )}
 
@@ -1234,6 +1306,13 @@ export function ThreatMap() {
       <div className="absolute bottom-24 right-3 z-10 flex flex-col items-end">
         <ImageGeolocatePanel />
       </div>
+
+      {/* Google 3D Tiles attribution — required by ToS */}
+      {viewport.zoom >= 15 && process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && (
+        <div className="pointer-events-none absolute bottom-8 right-2 z-10 select-none text-[9px] text-white/60">
+          © Google
+        </div>
+      )}
 
       {/* CRT scanline overlay */}
       {visualMode === "crt" && (

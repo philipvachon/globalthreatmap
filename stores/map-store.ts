@@ -120,6 +120,7 @@ interface MapState {
   militaryBasesLoading: boolean;
   aircraft: AircraftState[];
   aircraftLoading: boolean;
+  hiddenAircraftTypes: string[];
   earthquakes: EarthquakeEvent[];
   seismicLoading: boolean;
   cameras: CameraMarker[];
@@ -129,7 +130,12 @@ interface MapState {
   showSatellites: boolean;
   satellitePositions: SatellitePosition[];
   satellitesLoading: boolean;
+  hiddenSatCategories: string[];
   geolocatePin: GeolocatePin | null;
+  sidebarCollapsed: boolean;
+  showSatelliteBase: boolean;   // enables Mapbox satellite base map at zoom ≥ 10
+  showMapLabels: boolean;       // shows POI/street labels on satellite base map
+  showGoogle3DTiles: boolean;   // enables Google Photorealistic 3D Tiles at zoom ≥ 15
 
   setViewport: (viewport: Partial<MapViewport>) => void;
   flyTo: (longitude: number, latitude: number, zoom?: number) => void;
@@ -166,6 +172,7 @@ interface MapState {
   setMilitaryBasesLoading: (loading: boolean) => void;
   setAircraft: (aircraft: AircraftState[]) => void;
   setAircraftLoading: (loading: boolean) => void;
+  toggleAircraftType: (type: string) => void;
   setEarthquakes: (earthquakes: EarthquakeEvent[]) => void;
   setSeismicLoading: (loading: boolean) => void;
   setCameras: (cameras: CameraMarker[]) => void;
@@ -177,6 +184,11 @@ interface MapState {
   setSatellitePositions: (positions: SatellitePosition[]) => void;
   setSatellitesLoading: (loading: boolean) => void;
   setGeolocatePin: (pin: GeolocatePin | null) => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  toggleSatCategory: (category: string) => void;
+  toggleSatelliteBase: () => void;
+  toggleMapLabels: () => void;
+  toggleGoogle3DTiles: () => void;
 }
 
 const DEFAULT_VIEWPORT: MapViewport = {
@@ -219,6 +231,7 @@ export const useMapStore = create<MapState>((set) => ({
   militaryBasesLoading: false,
   aircraft: [],
   aircraftLoading: false,
+  hiddenAircraftTypes: [],
   earthquakes: [],
   seismicLoading: false,
   cameras: [],
@@ -228,7 +241,12 @@ export const useMapStore = create<MapState>((set) => ({
   showSatellites: false,
   satellitePositions: [],
   satellitesLoading: false,
+  hiddenSatCategories: [],
   geolocatePin: null,
+  sidebarCollapsed: false,
+  showSatelliteBase: true,
+  showMapLabels: true,
+  showGoogle3DTiles: true,
 
   setViewport: (viewport) =>
     set((state) => ({ viewport: { ...state.viewport, ...viewport } })),
@@ -273,6 +291,12 @@ export const useMapStore = create<MapState>((set) => ({
   setMilitaryBasesLoading: (loading) => set({ militaryBasesLoading: loading }),
   setAircraft:             (aircraft) => set({ aircraft }),
   setAircraftLoading:      (loading)  => set({ aircraftLoading: loading }),
+  toggleAircraftType: (type) =>
+    set((s) => ({
+      hiddenAircraftTypes: s.hiddenAircraftTypes.includes(type)
+        ? s.hiddenAircraftTypes.filter((t) => t !== type)
+        : [...s.hiddenAircraftTypes, type],
+    })),
   setEarthquakes:          (earthquakes) => set({ earthquakes }),
   setSeismicLoading:       (loading)     => set({ seismicLoading: loading }),
   setCameras:              (cameras) => set({ cameras }),
@@ -299,4 +323,15 @@ export const useMapStore = create<MapState>((set) => ({
   setSatellitePositions:  (positions) => set({ satellitePositions: positions }),
   setSatellitesLoading:   (loading)   => set({ satellitesLoading: loading }),
   setGeolocatePin:        (pin)       => set({ geolocatePin: pin }),
+  setSidebarCollapsed:    (collapsed) => set({ sidebarCollapsed: collapsed }),
+  toggleSatCategory: (category) =>
+    set((s) => ({
+      hiddenSatCategories: s.hiddenSatCategories.includes(category)
+        ? s.hiddenSatCategories.filter((c) => c !== category)
+        : [...s.hiddenSatCategories, category],
+    })),
+
+  toggleSatelliteBase:  () => set((s) => ({ showSatelliteBase:  !s.showSatelliteBase })),
+  toggleMapLabels:      () => set((s) => ({ showMapLabels:      !s.showMapLabels })),
+  toggleGoogle3DTiles:  () => set((s) => ({ showGoogle3DTiles:  !s.showGoogle3DTiles })),
 }));

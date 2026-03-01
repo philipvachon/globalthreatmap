@@ -8,6 +8,7 @@ import {
   Camera, CloudRain, Anchor, Zap, Satellite,
   Monitor, Tv2, Eye, Moon,
   Radar, TriangleAlert, Orbit,
+  Map, Type, Box,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -80,8 +81,13 @@ export function LayerPanel() {
     showWeather,      toggleWeather,
     showAlerts,       toggleAlerts,
     showSatellites,   toggleSatellites,
+    hiddenSatCategories, toggleSatCategory,
+    hiddenAircraftTypes, toggleAircraftType,
     aircraftLoading, seismicLoading, camerasLoading, maritimeConnected, alertsLoading, satellitesLoading,
     visualMode, setVisualMode,
+    showSatelliteBase, toggleSatelliteBase,
+    showMapLabels,     toggleMapLabels,
+    showGoogle3DTiles, toggleGoogle3DTiles,
   } = useMapStore();
 
   if (collapsed) {
@@ -115,7 +121,7 @@ export function LayerPanel() {
         {/* ── Events ──────────────────────────────── */}
         <SectionLabel label="Events" />
         <div className="px-1 space-y-0.5">
-          <ToggleRow label="Clusters"   active={showClusters}   onToggle={toggleClusters}   icon={<Dot      className="h-3.5 w-3.5" />} iconColor="text-blue-400" />
+          <ToggleRow label="Events"     active={showClusters}   onToggle={toggleClusters}   icon={<Dot      className="h-3.5 w-3.5" />} iconColor="text-blue-400" />
           <ToggleRow label="Heat Map"   active={showHeatmap}    onToggle={toggleHeatmap}    icon={<Flame    className="h-3.5 w-3.5" />} iconColor="text-orange-400" />
         </div>
 
@@ -130,6 +136,35 @@ export function LayerPanel() {
             iconColor="text-sky-400"
             loading={aircraftLoading}
           />
+          {showAircraft && (
+            <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border/50 pl-2">
+              {([
+                { key: "commercial", label: "Commercial", color: "bg-sky-400"    },
+                { key: "cargo",      label: "Cargo",      color: "bg-amber-400"  },
+                { key: "military",   label: "Military",   color: "bg-red-400"    },
+                { key: "private",    label: "Private",    color: "bg-green-400"  },
+                { key: "unknown",    label: "Other",      color: "bg-gray-400"   },
+              ] as const).map(({ key, label, color }) => {
+                const hidden = hiddenAircraftTypes.includes(key);
+                return (
+                  <button
+                    key={key}
+                    onClick={() => toggleAircraftType(key)}
+                    className={cn(
+                      "flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-[10px] transition-colors",
+                      hidden
+                        ? "text-muted-foreground/50 hover:text-muted-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <span className={cn("h-2 w-2 shrink-0 rounded-full", hidden ? "bg-muted" : color)} />
+                    {label}
+                    <span className={cn("ml-auto h-1.5 w-1.5 shrink-0 rounded-full", hidden ? "bg-muted" : "bg-green-400")} />
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <ToggleRow
             label="Maritime AIS"
             active={showMaritime}
@@ -149,6 +184,38 @@ export function LayerPanel() {
             iconColor="text-purple-400"
             loading={satellitesLoading}
           />
+          {showSatellites && (
+            <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border/50 pl-2">
+              {([
+                { key: "stations", label: "Stations",  color: "bg-yellow-200" },
+                { key: "starlink", label: "Starlink",  color: "bg-purple-400" },
+                { key: "gps",      label: "GPS",       color: "bg-cyan-400"   },
+                { key: "glonass",  label: "GLONASS",   color: "bg-orange-400" },
+                { key: "galileo",  label: "Galileo",   color: "bg-green-400"  },
+                { key: "beidou",   label: "BeiDou",    color: "bg-red-400"    },
+                { key: "weather",  label: "Weather",   color: "bg-yellow-400" },
+                { key: "visual",   label: "Visual",    color: "bg-sky-300"    },
+              ] as const).map(({ key, label, color }) => {
+                const hidden = hiddenSatCategories.includes(key);
+                return (
+                  <button
+                    key={key}
+                    onClick={() => toggleSatCategory(key)}
+                    className={cn(
+                      "flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-[10px] transition-colors",
+                      hidden
+                        ? "text-muted-foreground/50 hover:text-muted-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <span className={cn("h-2 w-2 shrink-0 rounded-full", hidden ? "bg-muted" : color)} />
+                    {label}
+                    <span className={cn("ml-auto h-1.5 w-1.5 shrink-0 rounded-full", hidden ? "bg-muted" : "bg-green-400")} />
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* ── Surveillance ─────────────────────────── */}
@@ -183,6 +250,40 @@ export function LayerPanel() {
             iconColor="text-violet-400"
             badge="NASA"
           />
+          <ToggleRow
+            label="Satellite Base"
+            active={showSatelliteBase}
+            onToggle={toggleSatelliteBase}
+            icon={<Map className="h-3.5 w-3.5" />}
+            iconColor="text-sky-400"
+          />
+          {showSatelliteBase && (
+            <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border/50 pl-2">
+              <button
+                onClick={toggleMapLabels}
+                className={cn(
+                  "flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-[10px] transition-colors",
+                  showMapLabels
+                    ? "text-muted-foreground hover:text-foreground"
+                    : "text-muted-foreground/50 hover:text-muted-foreground"
+                )}
+              >
+                <Type className={cn("h-3 w-3 shrink-0", showMapLabels ? "text-sky-400" : "text-muted")} />
+                Labels &amp; POIs
+                <span className={cn("ml-auto h-1.5 w-1.5 shrink-0 rounded-full", showMapLabels ? "bg-green-400" : "bg-muted")} />
+              </button>
+            </div>
+          )}
+          {!!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && (
+            <ToggleRow
+              label="3D Tiles"
+              active={showGoogle3DTiles}
+              onToggle={toggleGoogle3DTiles}
+              icon={<Box className="h-3.5 w-3.5" />}
+              iconColor="text-emerald-400"
+              badge="Google"
+            />
+          )}
         </div>
 
         {/* ── Environment ──────────────────────────── */}
