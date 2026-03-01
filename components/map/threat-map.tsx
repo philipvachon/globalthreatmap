@@ -7,6 +7,7 @@ import Map, {
   ScaleControl,
   Source,
   Layer,
+  Marker,
   Popup,
   type MapRef,
   type MapMouseEvent,
@@ -30,6 +31,7 @@ import { CameraPopup } from "./camera-popup";
 import { gibsTileUrl, SATELLITE_MIN_ZOOM } from "./satellite-controls";
 import { CountryConflictsModal } from "./country-conflicts-modal";
 import { SignInModal } from "@/components/auth/sign-in-modal";
+import { ImageGeolocatePanel } from "./image-geolocate-panel";
 import { hasReachedLimit, incrementCountryClicks } from "@/lib/usage-limits";
 
 const APP_MODE = process.env.NEXT_PUBLIC_APP_MODE || "self-hosted";
@@ -380,6 +382,7 @@ export function ThreatMap() {
     showSatellites, satellitePositions,
     showSatellite, satelliteDate, satelliteSource, satelliteOpacity,
     visualMode,
+    geolocatePin, setGeolocatePin,
   } = useMapStore();
 
   const { filteredEvents, selectedEvent, selectEvent } = useEventsStore();
@@ -1161,7 +1164,75 @@ export function ThreatMap() {
           />
 
           <SignInModal open={showSignInModal} onOpenChange={setShowSignInModal} />
+
+          {/* Geolocate image pin */}
+          {geolocatePin && (
+            <>
+              <Marker longitude={geolocatePin.longitude} latitude={geolocatePin.latitude} anchor="bottom">
+                <div className="flex flex-col items-center">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-purple-600 shadow-lg shadow-purple-900/50 ring-2 ring-purple-400/60">
+                    <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                    </svg>
+                  </div>
+                  <div className="h-2 w-0.5 bg-purple-500/60" />
+                </div>
+              </Marker>
+              <Popup
+                longitude={geolocatePin.longitude}
+                latitude={geolocatePin.latitude}
+                anchor="bottom"
+                offset={[0, -36] as [number, number]}
+                onClose={() => setGeolocatePin(null)}
+                closeButton
+                closeOnClick={false}
+                className="threat-popup"
+              >
+                <div className="min-w-[200px] p-2 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-500/20 text-purple-400">
+                      <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground leading-tight">
+                        {geolocatePin.placeName ?? "Geolocated Position"}
+                      </h3>
+                      <span className="text-[10px] text-purple-400 font-medium">
+                        {{exif: "EXIF GPS", geospy: "GeoSpy ML", "ai-vision": "Claude Vision"}[geolocatePin.method]}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    <div className="flex justify-between">
+                      <span>Confidence</span>
+                      <span className={`font-medium ${geolocatePin.confidence >= 0.75 ? "text-green-400" : geolocatePin.confidence >= 0.45 ? "text-yellow-400" : "text-red-400"}`}>
+                        {Math.round(geolocatePin.confidence * 100)}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Coords</span>
+                      <span className="font-mono text-foreground text-[10px]">
+                        {geolocatePin.latitude.toFixed(4)}, {geolocatePin.longitude.toFixed(4)}
+                      </span>
+                    </div>
+                  </div>
+                  {geolocatePin.reasoning && (
+                    <p className="text-[10px] text-muted-foreground leading-snug border-t border-border pt-1">
+                      {geolocatePin.reasoning}
+                    </p>
+                  )}
+                </div>
+              </Popup>
+            </>
+          )}
         </Map>
+      </div>
+
+      {/* Image Geolocate button — bottom-right, above nav controls */}
+      <div className="absolute bottom-24 right-3 z-10 flex flex-col items-end">
+        <ImageGeolocatePanel />
       </div>
 
       {/* CRT scanline overlay */}

@@ -58,6 +58,15 @@ export interface VesselMarker {
   flag?: string;
 }
 
+export interface GeolocatePin {
+  latitude: number;
+  longitude: number;
+  confidence: number;
+  method: "exif" | "geospy" | "ai-vision";
+  placeName?: string;
+  reasoning?: string;
+}
+
 export interface SatellitePosition {
   noradId: string;
   name: string;
@@ -120,6 +129,7 @@ interface MapState {
   showSatellites: boolean;
   satellitePositions: SatellitePosition[];
   satellitesLoading: boolean;
+  geolocatePin: GeolocatePin | null;
 
   setViewport: (viewport: Partial<MapViewport>) => void;
   flyTo: (longitude: number, latitude: number, zoom?: number) => void;
@@ -166,6 +176,7 @@ interface MapState {
   toggleSatellites: () => void;
   setSatellitePositions: (positions: SatellitePosition[]) => void;
   setSatellitesLoading: (loading: boolean) => void;
+  setGeolocatePin: (pin: GeolocatePin | null) => void;
 }
 
 const DEFAULT_VIEWPORT: MapViewport = {
@@ -217,6 +228,7 @@ export const useMapStore = create<MapState>((set) => ({
   showSatellites: false,
   satellitePositions: [],
   satellitesLoading: false,
+  geolocatePin: null,
 
   setViewport: (viewport) =>
     set((state) => ({ viewport: { ...state.viewport, ...viewport } })),
@@ -286,4 +298,5 @@ export const useMapStore = create<MapState>((set) => ({
   toggleSatellites:       () => set((s) => ({ showSatellites: !s.showSatellites })),
   setSatellitePositions:  (positions) => set({ satellitePositions: positions }),
   setSatellitesLoading:   (loading)   => set({ satellitesLoading: loading }),
+  setGeolocatePin:        (pin)       => set({ geolocatePin: pin }),
 }));
