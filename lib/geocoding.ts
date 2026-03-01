@@ -1,14 +1,14 @@
 import type { GeoLocation } from "@/types";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-// Use the cheapest model available - gpt-4.1-nano at $0.02/1M input, $0.15/1M output
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-nano";
+// Use the cheapest Claude model for simple location extraction
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
 
-// Initialize OpenAI client only if API key is available
-const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
+// Initialize Anthropic client only if API key is available
+const anthropic = ANTHROPIC_API_KEY ? new Anthropic({ apiKey: ANTHROPIC_API_KEY }) : null;
 
 // Blacklist of words that are often incorrectly extracted as locations
 const LOCATION_BLACKLIST = new Set([
@@ -322,14 +322,14 @@ export function extractLocationsFromText(text: string): string[] {
 }
 
 /**
- * Use OpenAI to extract the most relevant location from text
- * Returns null if OpenAI is not configured or fails
+ * Use Claude to extract the most relevant location from text
+ * Returns null if Anthropic is not configured or fails
  */
 async function extractLocationWithAI(
   title: string,
   regexCandidates: string[]
 ): Promise<string | null> {
-  if (!openai) {
+  if (!anthropic) {
     return null;
   }
 
@@ -339,23 +339,21 @@ async function extractLocationWithAI(
       : "";
 
   try {
-    const response = await openai.chat.completions.create({
-      model: OPENAI_MODEL,
+    const response = await anthropic.messages.create({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 50,
+      system: `You are a location extraction assistant. Given a news headline and optional location candidates, identify the PRIMARY geographic location (city, country, or region) where the event is happening. Respond with ONLY the location name, nothing else. If no clear location can be determined, respond with "UNKNOWN".`,
       messages: [
-        {
-          role: "system",
-          content: `You are a location extraction assistant. Given a news headline and optional location candidates, identify the PRIMARY geographic location (city, country, or region) where the event is happening. Respond with ONLY the location name, nothing else. If no clear location can be determined, respond with "UNKNOWN".`,
-        },
         {
           role: "user",
           content: `Headline: "${title}"${candidatesText}\n\nWhat is the primary location?`,
         },
       ],
-      max_tokens: 50,
-      temperature: 0,
     });
 
-    const result = response.choices[0]?.message?.content?.trim();
+    const result = response.content[0]?.type === "text"
+      ? response.content[0].text.trim()
+      : null;
 
     if (result && result !== "UNKNOWN" && result.length > 1) {
       return result;
@@ -363,7 +361,7 @@ async function extractLocationWithAI(
 
     return null;
   } catch (error) {
-    console.error("OpenAI location extraction error:", error);
+    console.error("Claude location extraction error:", error);
     return null;
   }
 }
@@ -465,8 +463,8 @@ export async function geocodeLocationsFromText(
 
   let primaryLocation: string | null = null;
 
-  // If OpenAI is configured and we have a title, use AI to get the best location
-  if (openai && title) {
+  // If Anthropic is configured and we have a title, use AI to get the best location
+  if (anthropic && title) {
     primaryLocation = await extractLocationWithAI(title, regexCandidates);
   }
 
@@ -505,5 +503,5 @@ export async function geocodeLocationsFromText(
  * Check if AI-enhanced location extraction is available
  */
 export function isAILocationExtractionEnabled(): boolean {
-  return !!openai;
+  return !!anthropic;
 }
