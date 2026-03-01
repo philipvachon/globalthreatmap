@@ -216,16 +216,16 @@ export async function POST(req: NextRequest) {
       } satisfies GeolocationResult);
     }
 
-    // ── Step 2: GeoSpy ML (fast, requires GEOSPY_API_KEY) ───────────────────
-    const geoSpyResult = await geospy(buf, mimeType);
-    if (geoSpyResult && geoSpyResult.confidence >= 0.35) {
-      return NextResponse.json(geoSpyResult);
-    }
-
-    // ── Step 3: Claude Vision (best for complex scenes, requires ANTHROPIC_API_KEY) ──
+    // ── Step 2: Claude Vision (primary AI, requires ANTHROPIC_API_KEY) ─────
     const aiResult = await claudeVision(buf, mimeType);
     if (aiResult) {
       return NextResponse.json(aiResult);
+    }
+
+    // ── Step 3: GeoSpy ML (fallback if Claude unavailable/fails, requires GEOSPY_API_KEY) ──
+    const geoSpyResult = await geospy(buf, mimeType);
+    if (geoSpyResult && geoSpyResult.confidence >= 0.35) {
+      return NextResponse.json(geoSpyResult);
     }
 
     return NextResponse.json(
