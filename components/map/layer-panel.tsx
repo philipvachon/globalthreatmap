@@ -8,7 +8,7 @@ import {
   Camera, CloudRain, Anchor, Zap, Satellite,
   Monitor, Tv2, Eye, Moon,
   Radar, TriangleAlert, Orbit,
-  Map, Type, Box,
+  Map, Type, Box, Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -88,6 +88,7 @@ export function LayerPanel() {
     showSatelliteBase, toggleSatelliteBase,
     showMapLabels,     toggleMapLabels,
     showGoogle3DTiles, toggleGoogle3DTiles,
+    showGhostMaps,     toggleGhostMaps,
   } = useMapStore();
 
   if (collapsed) {
@@ -123,6 +124,7 @@ export function LayerPanel() {
         <div className="px-1 space-y-0.5">
           <ToggleRow label="Events"     active={showClusters}   onToggle={toggleClusters}   icon={<Dot      className="h-3.5 w-3.5" />} iconColor="text-blue-400" />
           <ToggleRow label="Heat Map"   active={showHeatmap}    onToggle={toggleHeatmap}    icon={<Flame    className="h-3.5 w-3.5" />} iconColor="text-orange-400" />
+          <ToggleRow label="GhostMaps"  active={showGhostMaps}  onToggle={toggleGhostMaps}  icon={<Globe    className="h-3.5 w-3.5" />} iconColor="text-amber-400" badge="S2" />
         </div>
 
         {/* ── Tracking ────────────────────────────── */}

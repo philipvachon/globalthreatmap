@@ -24,7 +24,7 @@ import { useWeather } from "@/hooks/use-weather";
 import { useAlerts } from "@/hooks/use-alerts";
 import { useSatellites } from "@/hooks/use-satellites";
 import { useGoogle3DTiles } from "@/hooks/use-google-3d-tiles";
-import { SatelliteGlobeLayer, projectSatToScreen } from "@/components/map/satellite-globe-layer";
+import { useGhostMaps } from "@/hooks/use-ghostmaps";
 import { twoline2satrec, propagate, gstime, eciToGeodetic, degreesLat, degreesLong } from "satellite.js";
 import { threatLevelColors } from "@/types";
 import { EventPopup } from "./event-popup";
@@ -361,6 +361,118 @@ const alertsLineLayer: LayerProps = {
   },
 };
 
+// ─── GhostMaps (S2 Underground CIP / Border Crisis) ──────────────────────────
+
+const ghostmapsFillLayer: LayerProps = {
+  id: "ghostmaps-fill",
+  type: "fill",
+  filter: ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
+  paint: {
+    "fill-color": ["match", ["get", "source"], "border", "#ef4444", "#f59e0b"],
+    "fill-opacity": 0.12,
+  },
+};
+
+const ghostmapsLineLayer: LayerProps = {
+  id: "ghostmaps-line",
+  type: "line",
+  filter: ["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString", "Polygon", "MultiPolygon"]]],
+  paint: {
+    "line-color": ["match", ["get", "source"], "border", "#ef4444", "#f59e0b"],
+    "line-width": 1.5,
+    "line-opacity": 0.85,
+  },
+};
+
+const ghostmapsPointLayer: LayerProps = {
+  id: "ghostmaps-point",
+  type: "circle",
+  filter: ["==", ["geometry-type"], "Point"],
+  paint: {
+    "circle-color": ["match", ["get", "source"], "border", "#ef4444", "#f59e0b"],
+    "circle-radius": 6,
+    "circle-stroke-width": 1.5,
+    "circle-stroke-color": "#1e293b",
+    "circle-opacity": 0.9,
+  },
+};
+
+const ghostmapsLabelLayer: LayerProps = {
+  id: "ghostmaps-label",
+  type: "symbol",
+  filter: ["has", "name"],
+  minzoom: 6,
+  layout: {
+    "text-field": ["get", "name"],
+    "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
+    "text-size": 10,
+    "text-offset": [0, 1.1],
+    "text-anchor": "top",
+    "text-max-width": 12,
+  },
+  paint: {
+    "text-color": ["match", ["get", "source"], "border", "#ef4444", "#f59e0b"],
+    "text-halo-color": "#1e293b",
+    "text-halo-width": 1,
+    "text-opacity": 0.9,
+  },
+};
+
+// ─── Satellite orbit dots (GeoJSON circles, replaces custom WebGL layer) ─────
+// Simple colored circles on the globe surface. Category color = same as the
+// old WebGL layer. Point size grows with altitude class (LEO / MEO / GEO).
+
+const SAT_COLOR_EXPR = [
+  "match", ["get", "category"],
+  "stations", "#fffae6",
+  "starlink",  "#c084fc",
+  "gps",       "#22d3ee",
+  "glonass",   "#fb923c",
+  "galileo",   "#4ade80",
+  "beidou",    "#f87171",
+  "weather",   "#fde047",
+  "visual",    "#93c5fd",
+  "#aaaaaa",
+];
+
+const satelliteDotsLayer: LayerProps = {
+  id: "satellite-dots",
+  type: "circle",
+  paint: {
+    "circle-color": SAT_COLOR_EXPR as LayerProps["paint"],
+    "circle-radius": [
+      "case",
+      [">", ["get", "altKm"], 35000], 5,  // GEO
+      [">", ["get", "altKm"], 2000],  4,  // MEO
+      3,                                   // LEO / unknown
+    ],
+    "circle-opacity": 0.9,
+    "circle-stroke-width": 0.8,
+    "circle-stroke-color": "#000000",
+    "circle-stroke-opacity": 0.35,
+  },
+};
+
+const satelliteNameLayer: LayerProps = {
+  id: "satellite-names",
+  type: "symbol",
+  minzoom: 3,
+  layout: {
+    "text-field": ["get", "name"],
+    "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
+    "text-size": 9,
+    "text-offset": [0, 1.1],
+    "text-anchor": "top",
+    "text-max-width": 10,
+  },
+  paint: {
+    "text-color": SAT_COLOR_EXPR as LayerProps["paint"],
+    "text-halo-color": "#000000",
+    "text-halo-width": 1,
+    "text-opacity": 0.75,
+  },
+};
+
 // ─── Visual mode CSS filters ──────────────────────────────────────────────────
 
 const VISUAL_FILTERS: Record<string, string> = {
@@ -384,15 +496,12 @@ type SelectedCamera         = { longitude: number; latitude: number; id: string 
 type SelectedVessel         = { longitude: number; latitude: number; mmsi: string; name: string; type: string; speed: number; heading: number; destination?: string };
 type SelectedAlert          = { longitude: number; latitude: number; event: string; severity: string; urgency: string; areaDesc: string; headline?: string; ends?: string };
 type SelectedSatellite      = { longitude: number; latitude: number; name: string; noradId: string; altKm: number; inclination: number; category: string; tle1: string; tle2: string; track: [number, number][] };
+type SelectedGhostMap       = { longitude: number; latitude: number; name?: string; description?: string; source: string; folder: string };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ThreatMap() {
   const mapRef         = useRef<MapRef>(null);
-  const satLayerRef     = useRef<SatelliteGlobeLayer | null>(null);
-  // Keep a live ref to latest positions so the globe effect can seed the
-  // layer on first enable without being re-triggered every 30 s.
-  const satPositionsRef = useRef<import("@/stores/map-store").SatellitePosition[]>([]);
 
   const {
     viewport, setViewport,
@@ -413,6 +522,7 @@ export function ThreatMap() {
     geolocatePin, setGeolocatePin,
     sidebarCollapsed,
     showSatelliteBase, showMapLabels, showGoogle3DTiles,
+    showGhostMaps,
   } = useMapStore();
 
   const { filteredEvents, selectedEvent, selectEvent } = useEventsStore();
@@ -427,6 +537,7 @@ export function ThreatMap() {
   useAlerts();
   useSatellites();
   useGoogle3DTiles(mapRef, viewport.zoom, showGoogle3DTiles);
+  const { geojson: ghostMapsGeoJSON, loading: ghostMapsLoading } = useGhostMaps();
 
   // Resize map canvas after sidebar expand/collapse animation finishes (300ms)
   useEffect(() => {
@@ -443,6 +554,7 @@ export function ThreatMap() {
   const [selVessel, setSelVessel]     = useState<SelectedVessel | null>(null);
   const [selAlert, setSelAlert]       = useState<SelectedAlert | null>(null);
   const [selSatellite, setSelSatellite] = useState<SelectedSatellite | null>(null);
+  const [selGhostMap, setSelGhostMap]   = useState<SelectedGhostMap | null>(null);
   const [selCountry, setSelCountry]   = useState<string | null>(null);
   const [selCountryCode, setSelCountryCode] = useState<string | null>(null);
   const [isCountryLoading, setIsCountryLoading] = useState(false);
@@ -485,8 +597,23 @@ export function ThreatMap() {
     [satellitePositions, hiddenSatCategories],
   );
 
-  // Keep latestPositions ref in sync so the toggle effect can seed the layer
-  useEffect(() => { satPositionsRef.current = visibleSatPositions; }, [visibleSatPositions]);
+  // GeoJSON representation of visible satellites — fed directly to the Source
+  const visibleSatGeoJSON = useMemo<GeoJSON.FeatureCollection>(() => ({
+    type: "FeatureCollection",
+    features: visibleSatPositions.map((s) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [s.longitude, s.latitude] },
+      properties: {
+        name: s.name,
+        noradId: s.noradId,
+        altKm: Math.round(s.altKm),
+        category: s.category,
+        inclination: s.inclination,
+        tle1: s.tle1,
+        tle2: s.tle2,
+      },
+    })),
+  }), [visibleSatPositions]);
 
   // ── Always-on globe projection + atmosphere ──────────────────────────────
   // Apply once on load, then re-apply after every style swap so the dark↔satellite
@@ -514,41 +641,15 @@ export function ThreatMap() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Toggle: add/remove satellite custom 3-D WebGL layer
+  // When satellites are enabled and the user is zoomed in, fly to globe overview
   useEffect(() => {
+    if (!showSatellites) { setSelSatellite(null); return; }
     const map = mapRef.current?.getMap();
-    if (!map) return;
-
-    if (showSatellites) {
-      // Fly to globe overview if too zoomed in to see the sphere
-      if (map.getZoom() > 4) {
-        map.flyTo({ zoom: 1.5, duration: 1500, essential: true });
-      }
-
-      // Add the WebGL custom layer
-      if (!map.getLayer("satellite-3d-orbits")) {
-        const layer = new SatelliteGlobeLayer();
-        satLayerRef.current = layer;
-        map.addLayer(layer);
-        if (satPositionsRef.current.length > 0) {
-          layer.setPositions(satPositionsRef.current);
-        }
-      }
-    } else {
-      if (satLayerRef.current && map.getLayer("satellite-3d-orbits")) {
-        map.removeLayer("satellite-3d-orbits");
-        satLayerRef.current = null;
-      }
-      setSelSatellite(null);
+    if (map && map.getZoom() > 4) {
+      map.flyTo({ zoom: 1.5, duration: 1500, essential: true });
     }
-  // setSelSatellite is stable (Zustand setter) — only run on toggle change
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showSatellites]);
-
-  // Forward position updates (respecting category filter) to the custom WebGL layer
-  useEffect(() => {
-    satLayerRef.current?.setPositions(visibleSatPositions);
-  }, [visibleSatPositions]);
 
   function clearPopups() {
     selectEvent(null);
@@ -560,6 +661,7 @@ export function ThreatMap() {
     setSelVessel(null);
     setSelAlert(null);
     setSelSatellite(null);
+    setSelGhostMap(null);
   }
 
   // ─── GeoJSON memos ──────────────────────────────────────────────────────────
@@ -697,9 +799,10 @@ export function ThreatMap() {
     if (showFAACameras) ids.push("faa-cameras");
     if (showMaritime) ids.push("vessel-points");
     if (showAlerts) ids.push("alerts-fill");
-    // satellite-3d-orbits is a CustomLayer — Mapbox can't query it, handled via 3D hit-test
+    if (showGhostMaps) ids.push("ghostmaps-point", "ghostmaps-fill");
+    if (showSatellites) ids.push("satellite-dots");
     return ids;
-  }, [showClusters, showAircraft, showSeismic, showNYCCameras, showFAACameras, showMaritime, showAlerts]);
+  }, [showClusters, showAircraft, showSeismic, showNYCCameras, showFAACameras, showMaritime, showAlerts, showGhostMaps, showSatellites]);
 
   // ─── Map click handler ───────────────────────────────────────────────────────
 
@@ -800,6 +903,10 @@ export function ThreatMap() {
       if (lid === "alerts-fill") {
         // Use click lngLat as anchor since alerts are polygons
         setSelAlert({ longitude: event.lngLat.lng, latitude: event.lngLat.lat, event: props.event, severity: props.severity, urgency: props.urgency, areaDesc: props.areaDesc, headline: props.headline, ends: props.ends });
+        return;
+      }
+      if (lid === "ghostmaps-point" || lid === "ghostmaps-fill") {
+        setSelGhostMap({ longitude: event.lngLat.lng, latitude: event.lngLat.lat, name: props.name, description: props.description, source: props.source, folder: props.folder });
         return;
       }
       return;
@@ -922,6 +1029,42 @@ export function ThreatMap() {
               <Layer {...alertsFillLayer} />
               <Layer {...alertsLineLayer} />
             </Source>
+          )}
+
+          {/* GhostMaps — S2 Underground CIP + Border Crisis KMZ overlay */}
+          {showGhostMaps && ghostMapsGeoJSON && ghostMapsGeoJSON.features.length > 0 && (
+            <Source id="ghostmaps" type="geojson" data={ghostMapsGeoJSON}>
+              <Layer {...ghostmapsFillLayer} />
+              <Layer {...ghostmapsLineLayer} />
+              <Layer {...ghostmapsPointLayer} />
+              <Layer {...ghostmapsLabelLayer} />
+            </Source>
+          )}
+
+          {/* GhostMaps feature popup */}
+          {selGhostMap && (
+            <Popup
+              longitude={selGhostMap.longitude}
+              latitude={selGhostMap.latitude}
+              closeOnClick={false}
+              onClose={() => setSelGhostMap(null)}
+              maxWidth="280px"
+            >
+              <div className="space-y-1 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${selGhostMap.source === "border" ? "bg-red-400" : "bg-amber-400"}`} />
+                  <span className="font-semibold capitalize">{selGhostMap.source === "border" ? "Border Crisis" : "Intel CIP"}</span>
+                  <span className="text-muted-foreground">· {selGhostMap.folder}</span>
+                </div>
+                {selGhostMap.name && (
+                  <p className="font-medium leading-snug">{selGhostMap.name}</p>
+                )}
+                {selGhostMap.description && (
+                  <p className="text-muted-foreground leading-snug line-clamp-4">{selGhostMap.description}</p>
+                )}
+                <p className="text-[10px] text-muted-foreground/60">S2 Underground · GhostMaps</p>
+              </div>
+            </Popup>
           )}
 
           {/* satellite-3d-orbits custom WebGL layer is managed imperatively via satLayerRef */}

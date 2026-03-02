@@ -136,6 +136,7 @@ interface MapState {
   showSatelliteBase: boolean;   // enables Mapbox satellite base map at zoom ≥ 10
   showMapLabels: boolean;       // shows POI/street labels on satellite base map
   showGoogle3DTiles: boolean;   // enables Google Photorealistic 3D Tiles at zoom ≥ 15
+  showGhostMaps: boolean;       // S2 Underground GhostMaps CIP + Border Crisis KMZ overlay
 
   setViewport: (viewport: Partial<MapViewport>) => void;
   flyTo: (longitude: number, latitude: number, zoom?: number) => void;
@@ -189,6 +190,7 @@ interface MapState {
   toggleSatelliteBase: () => void;
   toggleMapLabels: () => void;
   toggleGoogle3DTiles: () => void;
+  toggleGhostMaps: () => void;
 }
 
 const DEFAULT_VIEWPORT: MapViewport = {
@@ -247,6 +249,7 @@ export const useMapStore = create<MapState>((set) => ({
   showSatelliteBase: true,
   showMapLabels: true,
   showGoogle3DTiles: true,
+  showGhostMaps: false,
 
   setViewport: (viewport) =>
     set((state) => ({ viewport: { ...state.viewport, ...viewport } })),
@@ -334,4 +337,5 @@ export const useMapStore = create<MapState>((set) => ({
   toggleSatelliteBase:  () => set((s) => ({ showSatelliteBase:  !s.showSatelliteBase })),
   toggleMapLabels:      () => set((s) => ({ showMapLabels:      !s.showMapLabels })),
   toggleGoogle3DTiles:  () => set((s) => ({ showGoogle3DTiles:  !s.showGoogle3DTiles })),
+  toggleGhostMaps:      () => set((s) => ({ showGhostMaps:      !s.showGhostMaps })),
 }));
