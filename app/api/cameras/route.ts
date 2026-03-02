@@ -7,11 +7,6 @@ export const dynamic = "force-dynamic";
 // Public API — webcams.nyctmc.org — no auth required
 const NYC_CAMERAS_URL = "https://webcams.nyctmc.org/api/cameras/";
 
-// Image URL pattern for NYC DOT cameras
-function nycImageUrl(id: string) {
-  return `https://webcams.nyctmc.org/cameras/${id}/image`;
-}
-
 function parseNYCResponse(data: unknown): CameraMarker[] {
   const arr: unknown[] = Array.isArray(data)
     ? data
@@ -28,7 +23,9 @@ function parseNYCResponse(data: unknown): CameraMarker[] {
       const lat = Number(c.latitude ?? c.lat ?? 0);
       const lng = Number(c.longitude ?? c.lng ?? c.lon ?? 0);
       const name = String(c.name ?? c.description ?? id);
-      const online = c.online !== 0 && c.online !== false && c.online !== "false" && c.isOnline !== false;
+      const online = c.online !== 0 && c.online !== false && c.online !== "false" && c.isOnline !== false && c.isOnline !== "false";
+      // Use imageUrl from API response; fall back to the documented path
+      const imageUrl = String(c.imageUrl ?? c.image_url ?? `https://webcams.nyctmc.org/api/cameras/${id}/image`);
 
       if (!id || !lat || !lng) return null;
       // NYC DOT cameras are all in the NYC metro area
@@ -39,7 +36,7 @@ function parseNYCResponse(data: unknown): CameraMarker[] {
         name,
         latitude: lat,
         longitude: lng,
-        imageUrl: nycImageUrl(id),
+        imageUrl,
         source: "nyc" as const,
         isOnline: Boolean(online),
       };

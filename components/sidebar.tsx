@@ -6,12 +6,20 @@ import { Button } from "@/components/ui/button";
 import { EventFeed } from "@/components/feed/event-feed";
 import { EntitySearch } from "@/components/search/entity-search";
 import { Activity, FileText, ChevronLeft, ChevronRight } from "lucide-react";
+import { useMapStore } from "@/stores/map-store";
 
 type Tab = "feed" | "search";
 
 export function Sidebar() {
   const [activeTab, setActiveTab] = useState<Tab>("feed");
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const setSidebarCollapsed = useMapStore((s) => s.setSidebarCollapsed);
+
+  function toggleCollapse() {
+    const next = !isCollapsed;
+    setIsCollapsed(next);
+    setSidebarCollapsed(next);
+  }
 
   const tabs = [
     { id: "feed" as Tab, label: "Live Feed", icon: Activity },
@@ -29,7 +37,7 @@ export function Sidebar() {
         variant="ghost"
         size="icon"
         className="absolute -left-3 top-4 z-10 h-6 w-6 rounded-full border border-border bg-card"
-        onClick={() => setIsCollapsed(!isCollapsed)}
+        onClick={toggleCollapse}
       >
         {isCollapsed ? (
           <ChevronLeft className="h-3 w-3" />

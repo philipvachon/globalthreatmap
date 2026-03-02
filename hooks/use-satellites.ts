@@ -43,8 +43,9 @@ export function useSatellites() {
     for (const { satrec, entry } of satrecsRef.current.values()) {
       try {
         const pv = propagate(satrec, now);
-        if (!pv) continue;
-        const geo = eciToGeodetic(pv.position, gst);
+        if (!pv || !pv.position) continue;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const geo = eciToGeodetic(pv.position as any, gst);
         const lat = degreesLat(geo.latitude);
         const lng = degreesLong(geo.longitude);
         if (!isFinite(lat) || !isFinite(lng)) continue;

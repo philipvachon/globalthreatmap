@@ -19,6 +19,10 @@
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@deck.gl/core": "^9.2.10",
+    "@deck.gl/geo-layers": "^9.2.10",
+    "@deck.gl/mapbox": "^9.2.10",
+    "@loaders.gl/3d-tiles": "^4.3.4",
     "@mapbox/mapbox-gl-geocoder": "^5.1.2",
     "@tailwindcss/postcss": "^4.1.18",
     "@types/node": "^25.0.10",

@@ -4,15 +4,17 @@ export const dynamic = "force-dynamic";
 
 // CelesTrak TLE group definitions — each group is a curated orbital category.
 // TLEs are valid for several hours; we cache for 1 hour to avoid rate-limiting.
+const GP_BASE = "https://celestrak.org/NORAD/elements/gp.php?FORMAT=tle&GROUP=";
+
 const GROUPS = [
-  { url: "https://celestrak.org/pub/TLE/stations.txt",   category: "stations" },
-  { url: "https://celestrak.org/pub/TLE/visual.txt",     category: "visual"   },
-  { url: "https://celestrak.org/pub/TLE/gps-ops.txt",    category: "gps"      },
-  { url: "https://celestrak.org/pub/TLE/glo-ops.txt",    category: "glonass"  },
-  { url: "https://celestrak.org/pub/TLE/galileo.txt",    category: "galileo"  },
-  { url: "https://celestrak.org/pub/TLE/beidou.txt",     category: "beidou"   },
-  { url: "https://celestrak.org/pub/TLE/weather.txt",    category: "weather"  },
-  { url: "https://celestrak.org/pub/TLE/starlink.txt",   category: "starlink" },
+  { url: `${GP_BASE}stations`, category: "stations" },
+  { url: `${GP_BASE}visual`,   category: "visual"   },
+  { url: `${GP_BASE}gps-ops`,  category: "gps"      },
+  { url: `${GP_BASE}glo-ops`,  category: "glonass"  },
+  { url: `${GP_BASE}galileo`,  category: "galileo"  },
+  { url: `${GP_BASE}beidou`,   category: "beidou"   },
+  { url: `${GP_BASE}weather`,  category: "weather"  },
+  { url: `${GP_BASE}starlink`, category: "starlink" },
 ];
 
 interface TLEEntry {
