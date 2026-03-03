@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { XMLParser } from "fast-xml-parser";
 import type { CameraMarker } from "@/stores/map-store";
 
 export const dynamic = "force-dynamic";
@@ -143,11 +144,85 @@ function parseWSDOTResponse(data: unknown): CameraMarker[] {
     .filter((c): c is CameraMarker => c !== null);
 }
 
+// ─── NOAA NDBC BuoyCam ────────────────────────────────────────────────────────
+// Active stations XML — public, no auth. Camera image URL pattern per NDBC docs.
+const NDBC_STATIONS_URL = "https://www.ndbc.noaa.gov/activestations.xml";
+
+async function fetchNDBCCameras(): Promise<CameraMarker[]> {
+  try {
+    const res = await fetch(NDBC_STATIONS_URL, {
+      headers: { Accept: "application/xml" },
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return [];
+    const xml = await res.text();
+    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const parsed: any = parser.parse(xml);
+    const raw = parsed?.stations?.station ?? [];
+    const stations: unknown[] = Array.isArray(raw) ? raw : [raw];
+    return stations
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((s: any): CameraMarker | null => {
+        const id = String(s["@_id"] ?? "");
+        const lat = parseFloat(s["@_lat"] ?? "");
+        const lng = parseFloat(s["@_lon"] ?? "");
+        const name = String(s["@_name"] ?? id);
+        if (!id || !isFinite(lat) || !isFinite(lng)) return null;
+        return {
+          id: `ndbc-${id}`,
+          name: `NDBC ${id} — ${name}`,
+          latitude: lat,
+          longitude: lng,
+          imageUrl: `https://www.ndbc.noaa.gov/images/buoycam/${id}_cap.jpg`,
+          source: "ndbc" as const,
+          isOnline: true,
+        };
+      })
+      .filter((c): c is CameraMarker => c !== null);
+  } catch {
+    return [];
+  }
+}
+
+// ─── National Park Service Webcams ────────────────────────────────────────────
+// Free API key from developer.nps.gov — set NPS_API_KEY in .env.local
+const NPS_WEBCAMS_URL = "https://developer.nps.gov/api/v1/webcams";
+
+async function fetchNPSCameras(): Promise<CameraMarker[]> {
+  const key = process.env.NPS_API_KEY;
+  if (!key) return [];
+  try {
+    const res = await fetch(`${NPS_WEBCAMS_URL}?api_key=${key}&limit=500`, {
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any = await res.json();
+    const items: unknown[] = Array.isArray(data.data) ? data.data : [];
+    return items
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .flatMap((item: any): CameraMarker[] => {
+        const lat = parseFloat(item.latitude ?? "");
+        const lng = parseFloat(item.longitude ?? "");
+        if (!isFinite(lat) || !isFinite(lng) || (lat === 0 && lng === 0)) return [];
+        const id = String(item.id ?? "");
+        if (!id) return [];
+        const name = String(item.title ?? `NPS Webcam ${id}`).trim();
+        const imageUrl: string = item.images?.[0]?.url ?? item.url ?? "";
+        if (!imageUrl) return [];
+        return [{ id: `nps-${id}`, name, latitude: lat, longitude: lng, imageUrl, source: "nps" as const, isOnline: true }];
+      });
+  } catch {
+    return [];
+  }
+}
+
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const source = searchParams.get("source") ?? "nyc"; // "nyc" | "faa" | "caltrans" | "wsdot" | "all"
+  const source = searchParams.get("source") ?? "nyc"; // "nyc" | "faa" | "caltrans" | "wsdot" | "ndbc" | "nps" | "all"
 
   const cameras: CameraMarker[] = [];
 
@@ -215,6 +290,14 @@ export async function GET(request: Request) {
         // Non-fatal
       }
     }
+  }
+
+  if (source === "ndbc" || source === "all") {
+    cameras.push(...(await fetchNDBCCameras()));
+  }
+
+  if (source === "nps" || source === "all") {
+    cameras.push(...(await fetchNPSCameras()));
   }
 
   return NextResponse.json({

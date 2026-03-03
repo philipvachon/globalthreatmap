@@ -33,6 +33,9 @@ export function useGoogle3DTiles(
         if (!mapRef.current || currentZoom < ZOOM_THRESHOLD) return;
 
         const overlay = new MapboxOverlay({
+          // interleaved: true renders deck.gl within Mapbox's layer stack rather than
+          // a separate canvas, so Mapbox layers (camera dots, etc.) can appear above it.
+          interleaved: true,
           layers: [
             new Tile3DLayer({
               id: "google-3d-tiles",
@@ -46,6 +49,22 @@ export function useGoogle3DTiles(
         map.addControl(overlay);
         overlayRef.current = overlay;
         map.easeTo({ pitch: AUTO_PITCH, duration: 800 });
+
+        // If camera/marker layers are already active, move the deck.gl layer
+        // (Mapbox layer id "deck-overlay") to sit below them so they stay visible.
+        const ABOVE_LAYERS = [
+          "nyc-cameras", "faa-cameras", "caltrans-cameras",
+          "wsdot-cameras", "ndbc-cameras", "nps-cameras",
+          "vessel-points", "aircraft-points", "satellite-dots",
+        ];
+        for (const id of ABOVE_LAYERS) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if ((map as any).getLayer(id)) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            try { (map as any).moveLayer("deck-overlay", id); } catch { /* ignore */ }
+            break;
+          }
+        }
       }).catch(() => { /* no API key, network error, etc. — silent fail */ });
 
     } else {

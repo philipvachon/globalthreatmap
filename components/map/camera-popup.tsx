@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import type { CameraMarker } from "@/stores/map-store";
 
-// NYC DOT traffic cameras update approximately every 5-10 seconds
-const NYC_REFRESH_MS = 10_000;
+// NYC DOT traffic cameras update approximately every 2-5 seconds
+const NYC_REFRESH_MS = 2_000;
 // FAA weather cameras update approximately every 60 seconds
 const FAA_REFRESH_MS = 60_000;
 
@@ -20,7 +20,7 @@ export function CameraPopup({ camera, expanded = false, onToggleExpand }: Camera
   const [lastRefresh, setLastRefresh] = useState(Date.now());
 
   const refreshMs = camera.source === "nyc" ? NYC_REFRESH_MS : FAA_REFRESH_MS;
-  const refreshLabel = camera.source === "nyc" ? "10s" : "60s";
+  const refreshLabel = camera.source === "nyc" ? "2s" : "60s";
 
   // Reset image immediately when camera changes — fixes stale feed on switch
   useEffect(() => {

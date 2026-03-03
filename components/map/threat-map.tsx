@@ -243,12 +243,11 @@ const trafficLayer: LayerProps = {
 const nycCameraLayer: LayerProps = {
   id: "nyc-cameras",
   type: "circle",
-  minzoom: 10,
   filter: ["==", ["get", "source"], "nyc"],
   paint: {
     "circle-color": "#14b8a6",
-    "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 4, 14, 7],
-    "circle-stroke-width": 2,
+    "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 3, 14, 7],
+    "circle-stroke-width": 1.5,
     "circle-stroke-color": ["case", ["get", "isOnline"], "#ffffff", "#6b7280"],
     "circle-opacity": ["case", ["get", "isOnline"], 0.9, 0.45],
   },
@@ -260,8 +259,8 @@ const faaCameraLayer: LayerProps = {
   filter: ["==", ["get", "source"], "faa"],
   paint: {
     "circle-color": "#818cf8",
-    "circle-radius": 7,
-    "circle-stroke-width": 2,
+    "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 3, 14, 7],
+    "circle-stroke-width": 1.5,
     "circle-stroke-color": "#ffffff",
     "circle-opacity": 0.85,
   },
@@ -270,11 +269,10 @@ const faaCameraLayer: LayerProps = {
 const caltransCameraLayer: LayerProps = {
   id: "caltrans-cameras",
   type: "circle",
-  minzoom: 8,
   filter: ["==", ["get", "source"], "caltrans"],
   paint: {
     "circle-color": "#f97316",
-    "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3, 14, 6],
+    "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 3, 14, 6],
     "circle-stroke-width": 1.5,
     "circle-stroke-color": "#ffffff",
     "circle-opacity": 0.85,
@@ -284,14 +282,39 @@ const caltransCameraLayer: LayerProps = {
 const wsdotCameraLayer: LayerProps = {
   id: "wsdot-cameras",
   type: "circle",
-  minzoom: 8,
   filter: ["==", ["get", "source"], "wsdot"],
   paint: {
     "circle-color": "#a78bfa",
-    "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3, 14, 6],
+    "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 3, 14, 6],
     "circle-stroke-width": 1.5,
     "circle-stroke-color": "#ffffff",
     "circle-opacity": ["case", ["get", "isOnline"], 0.9, 0.4],
+  },
+};
+
+const ndbcCameraLayer: LayerProps = {
+  id: "ndbc-cameras",
+  type: "circle",
+  filter: ["==", ["get", "source"], "ndbc"],
+  paint: {
+    "circle-color": "#06b6d4",
+    "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 3, 14, 7],
+    "circle-stroke-width": 1.5,
+    "circle-stroke-color": "#ffffff",
+    "circle-opacity": 0.9,
+  },
+};
+
+const npsCameraLayer: LayerProps = {
+  id: "nps-cameras",
+  type: "circle",
+  filter: ["==", ["get", "source"], "nps"],
+  paint: {
+    "circle-color": "#22c55e",
+    "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 3, 14, 7],
+    "circle-stroke-width": 1.5,
+    "circle-stroke-color": "#ffffff",
+    "circle-opacity": 0.9,
   },
 };
 
@@ -412,16 +435,15 @@ const ghostmapsLineLayer: LayerProps = {
   },
 };
 
-const ghostmapsPointLayer: LayerProps = {
-  id: "ghostmaps-point",
-  type: "circle",
+const ghostmapsIconLayer: LayerProps = {
+  id: "ghostmaps-icon",
+  type: "symbol",
   filter: ["==", ["geometry-type"], "Point"],
-  paint: {
-    "circle-color": ["match", ["get", "source"], "border", "#ef4444", "#f59e0b"],
-    "circle-radius": 6,
-    "circle-stroke-width": 1.5,
-    "circle-stroke-color": "#1e293b",
-    "circle-opacity": 0.9,
+  layout: {
+    "text-field": ["get", "iconEmoji"],
+    "text-size": 16,
+    "text-allow-overlap": true,
+    "text-ignore-placement": true,
   },
 };
 
@@ -526,7 +548,7 @@ type SelectedCamera         = { longitude: number; latitude: number; id: string 
 type SelectedVessel         = { longitude: number; latitude: number; mmsi: string; name: string; type: string; speed: number; heading: number; destination?: string };
 type SelectedAlert          = { longitude: number; latitude: number; event: string; severity: string; urgency: string; areaDesc: string; headline?: string; ends?: string };
 type SelectedSatellite      = { longitude: number; latitude: number; name: string; noradId: string; altKm: number; inclination: number; category: string; tle1: string; tle2: string; track: [number, number][] };
-type SelectedGhostMap       = { longitude: number; latitude: number; name?: string; description?: string; source: string; folder: string };
+type SelectedGhostMap       = { longitude: number; latitude: number; name?: string; attributes?: Record<string, string>; source: string; folder: string };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -541,7 +563,7 @@ export function ThreatMap() {
     showAircraft, aircraft, hiddenAircraftTypes,
     showSeismic, earthquakes,
     showTraffic,
-    showNYCCameras, showFAACameras, showCaltransCameras, showWSDOTCameras, cameras,
+    showNYCCameras, showFAACameras, showCaltransCameras, showWSDOTCameras, showNDBCBuoys, showNPSCameras, cameras,
     showMaritime, vessels,
     showFire,
     showWeather, weatherPath, weatherHost,
@@ -552,7 +574,8 @@ export function ThreatMap() {
     geolocatePin, setGeolocatePin,
     sidebarCollapsed,
     showSatelliteBase, showMapLabels, showGoogle3DTiles,
-    showGhostMaps,
+    showGhostMaps, hiddenGhostMapSources,
+    showHillshade, showTerrain,
   } = useMapStore();
 
   const { filteredEvents, selectedEvent, selectEvent } = useEventsStore();
@@ -574,6 +597,29 @@ export function ThreatMap() {
     const id = setTimeout(() => mapRef.current?.getMap()?.resize(), 310);
     return () => clearTimeout(id);
   }, [sidebarCollapsed]);
+
+  // Mapbox 3D terrain — add DEM source and set/clear terrain exaggeration
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    if (showTerrain) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (!(map as any).getSource("mapbox-dem")) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (map as any).addSource("mapbox-dem", {
+          type: "raster-dem",
+          url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+          tileSize: 512,
+          maxzoom: 14,
+        });
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (map as any).setTerrain({ source: "mapbox-dem", exaggeration: 1.5 });
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (map as any).setTerrain?.(null);
+    }
+  }, [showTerrain]);
 
   const [selEntity, setSelEntity]     = useState<SelectedEntityLocation | null>(null);
   const [selBase, setSelBase]         = useState<SelectedMilitaryBase | null>(null);
@@ -644,6 +690,17 @@ export function ThreatMap() {
       },
     })),
   }), [visibleSatPositions]);
+
+  // Filter GhostMaps features by hidden sources (CIP / Border)
+  const filteredGhostMapsGeoJSON = useMemo(() => {
+    if (!ghostMapsGeoJSON || hiddenGhostMapSources.length === 0) return ghostMapsGeoJSON;
+    return {
+      ...ghostMapsGeoJSON,
+      features: ghostMapsGeoJSON.features.filter(
+        (f) => !hiddenGhostMapSources.includes(f.properties?.source)
+      ),
+    };
+  }, [ghostMapsGeoJSON, hiddenGhostMapSources]);
 
   // ── Always-on globe projection + atmosphere ──────────────────────────────
   // Apply once on load, then re-apply after every style swap so the dark↔satellite
@@ -829,12 +886,14 @@ export function ThreatMap() {
     if (showFAACameras)      ids.push("faa-cameras");
     if (showCaltransCameras) ids.push("caltrans-cameras");
     if (showWSDOTCameras)    ids.push("wsdot-cameras");
+    if (showNDBCBuoys)       ids.push("ndbc-cameras");
+    if (showNPSCameras)      ids.push("nps-cameras");
     if (showMaritime) ids.push("vessel-points");
     if (showAlerts) ids.push("alerts-fill");
-    if (showGhostMaps) ids.push("ghostmaps-point", "ghostmaps-fill");
+    if (showGhostMaps) ids.push("ghostmaps-icon", "ghostmaps-fill");
     if (showSatellites) ids.push("satellite-dots");
     return ids;
-  }, [showClusters, showAircraft, showSeismic, showNYCCameras, showFAACameras, showCaltransCameras, showWSDOTCameras, showMaritime, showAlerts, showGhostMaps, showSatellites]);
+  }, [showClusters, showAircraft, showSeismic, showNYCCameras, showFAACameras, showCaltransCameras, showWSDOTCameras, showNDBCBuoys, showNPSCameras, showMaritime, showAlerts, showGhostMaps, showSatellites]);
 
   // ─── Map click handler ───────────────────────────────────────────────────────
 
@@ -877,7 +936,7 @@ export function ThreatMap() {
         setSelQuake({ longitude: coords[0], latitude: coords[1], magnitude: props.magnitude, place: props.place, time: props.time, depth: props.depth });
         return;
       }
-      if (lid === "nyc-cameras" || lid === "faa-cameras" || lid === "caltrans-cameras" || lid === "wsdot-cameras") {
+      if (lid === "nyc-cameras" || lid === "faa-cameras" || lid === "caltrans-cameras" || lid === "wsdot-cameras" || lid === "ndbc-cameras" || lid === "nps-cameras") {
         setSelCamera({ longitude: coords[0], latitude: coords[1], id: props.id });
         setCameraExpanded(false);
         return;
@@ -891,8 +950,10 @@ export function ThreatMap() {
         setSelAlert({ longitude: event.lngLat.lng, latitude: event.lngLat.lat, event: props.event, severity: props.severity, urgency: props.urgency, areaDesc: props.areaDesc, headline: props.headline, ends: props.ends });
         return;
       }
-      if (lid === "ghostmaps-point" || lid === "ghostmaps-fill") {
-        setSelGhostMap({ longitude: event.lngLat.lng, latitude: event.lngLat.lat, name: props.name, description: props.description, source: props.source, folder: props.folder });
+      if (lid === "ghostmaps-icon" || lid === "ghostmaps-fill") {
+        let attributes: Record<string, string> | undefined;
+        try { if (props.attributesJson) attributes = JSON.parse(props.attributesJson); } catch { /* ignore */ }
+        setSelGhostMap({ longitude: event.lngLat.lng, latitude: event.lngLat.lat, name: props.name, attributes, source: props.source, folder: props.folder });
         return;
       }
       if (lid === "satellite-dots") {
@@ -924,7 +985,8 @@ export function ThreatMap() {
       return;
     }
 
-    // No feature — reverse-geocode for country
+    // No feature — reverse-geocode for country (only when Events layer is active)
+    if (!showClusters) return;
     clearPopups();
     const { lng, lat } = event.lngLat;
     try {
@@ -940,7 +1002,7 @@ export function ThreatMap() {
       }
     } catch { /* ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredEvents, selectEvent, viewport.zoom, checkLimit, requiresAuth, isAuthenticated, initialized]);
+  }, [filteredEvents, selectEvent, viewport.zoom, checkLimit, requiresAuth, isAuthenticated, initialized, showClusters]);
 
   const handleMouseEnter = useCallback(() => { if (mapRef.current) mapRef.current.getCanvas().style.cursor = "pointer"; }, []);
   const handleMouseLeave = useCallback(() => { if (mapRef.current) mapRef.current.getCanvas().style.cursor = ""; }, []);
@@ -959,7 +1021,7 @@ export function ThreatMap() {
     );
   }
 
-  const showAnyCameras = showNYCCameras || showFAACameras || showCaltransCameras || showWSDOTCameras;
+  const showAnyCameras = showNYCCameras || showFAACameras || showCaltransCameras || showWSDOTCameras || showNDBCBuoys || showNPSCameras;
   const cssFilter = VISUAL_FILTERS[visualMode] ?? "";
 
   // Base map: satellite when enabled (all zoom levels), dark otherwise.
@@ -1012,6 +1074,19 @@ export function ThreatMap() {
             </Source>
           )}
 
+          {/* ArcGIS World Hillshade */}
+          {showHillshade && (
+            <Source
+              id="arcgis-hillshade"
+              type="raster"
+              tiles={["https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"]}
+              tileSize={256}
+              attribution="© Esri, USGS, NOAA"
+            >
+              <Layer id="arcgis-hillshade-layer" type="raster" paint={{ "raster-opacity": 0.45 }} />
+            </Source>
+          )}
+
           {/* NASA GIBS fire raster */}
           {showFire && (
             <Source id="nasa-fire" type="raster" tiles={[fireTileUrl]} tileSize={256} minzoom={0} maxzoom={8}>
@@ -1043,11 +1118,11 @@ export function ThreatMap() {
           )}
 
           {/* GhostMaps — S2 Underground CIP + Border Crisis KMZ overlay */}
-          {showGhostMaps && ghostMapsGeoJSON && ghostMapsGeoJSON.features.length > 0 && (
-            <Source id="ghostmaps" type="geojson" data={ghostMapsGeoJSON}>
+          {showGhostMaps && filteredGhostMapsGeoJSON && filteredGhostMapsGeoJSON.features.length > 0 && (
+            <Source id="ghostmaps" type="geojson" data={filteredGhostMapsGeoJSON}>
               <Layer {...ghostmapsFillLayer} />
               <Layer {...ghostmapsLineLayer} />
-              <Layer {...ghostmapsPointLayer} />
+              <Layer {...ghostmapsIconLayer} />
               <Layer {...ghostmapsLabelLayer} />
             </Source>
           )}
@@ -1059,21 +1134,60 @@ export function ThreatMap() {
               latitude={selGhostMap.latitude}
               closeOnClick={false}
               onClose={() => setSelGhostMap(null)}
-              maxWidth="280px"
+              maxWidth="300px"
             >
-              <div className="space-y-1 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <span className={`h-2 w-2 shrink-0 rounded-full ${selGhostMap.source === "border" ? "bg-red-400" : "bg-amber-400"}`} />
-                  <span className="font-semibold capitalize">{selGhostMap.source === "border" ? "Border Crisis" : "Intel CIP"}</span>
-                  <span className="text-muted-foreground">· {selGhostMap.folder}</span>
+              <div className="space-y-2 text-xs min-w-[220px]">
+                {/* Header: type icon + source badge */}
+                <div className="flex items-start gap-2 pb-1.5 border-b border-border/40">
+                  <span className="text-lg leading-none mt-0.5 shrink-0" role="img" aria-label="type">
+                    {(() => {
+                      const f = (selGhostMap.folder + " " + selGhostMap.source).toLowerCase();
+                      if (f.includes("border") || f.includes("crossing") || f.includes("patrol")) return "🚨";
+                      if (f.includes("cartel") || f.includes("gang") || f.includes("smuggl")) return "⚠️";
+                      if (f.includes("military") || f.includes("defense") || f.includes("army") || f.includes("guard")) return "🪖";
+                      if (f.includes("law") || f.includes("police") || f.includes("sheriff") || f.includes("enforcement")) return "🛡️";
+                      if (f.includes("fire") || f.includes("wildfire") || f.includes("arson")) return "🔥";
+                      if (f.includes("medical") || f.includes("hospital") || f.includes("ems") || f.includes("health")) return "🏥";
+                      if (f.includes("power") || f.includes("electric") || f.includes("energy") || f.includes("utility")) return "⚡";
+                      if (f.includes("infrastructure") || f.includes("critical")) return "🏭";
+                      if (f.includes("school") || f.includes("education") || f.includes("university")) return "🏫";
+                      if (f.includes("aviation") || f.includes("airport") || f.includes("flight")) return "✈️";
+                      if (f.includes("government") || f.includes("federal") || f.includes("capitol")) return "🏛️";
+                      if (f.includes("water") || f.includes("dam") || f.includes("flood")) return "💧";
+                      if (f.includes("nuclear") || f.includes("chemical") || f.includes("hazmat") || f.includes("cbrn")) return "☢️";
+                      if (f.includes("communication") || f.includes("telecom") || f.includes("radio") || f.includes("tower")) return "📡";
+                      if (f.includes("transport") || f.includes("rail") || f.includes("highway") || f.includes("bridge")) return "🛣️";
+                      return selGhostMap.source === "border" ? "🔴" : "📍";
+                    })()}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-[10px] font-bold uppercase tracking-wide ${selGhostMap.source === "border" ? "text-red-400" : "text-amber-400"}`}>
+                        {selGhostMap.source === "border" ? "Border Crisis" : "Intel CIP"}
+                      </span>
+                    </div>
+                    <div className="text-muted-foreground text-[10px] truncate">{selGhostMap.folder}</div>
+                  </div>
                 </div>
+
+                {/* Feature name */}
                 {selGhostMap.name && (
-                  <p className="font-medium leading-snug">{selGhostMap.name}</p>
+                  <p className="font-semibold leading-snug text-[11px]">{selGhostMap.name}</p>
                 )}
-                {selGhostMap.description && (
-                  <p className="text-muted-foreground leading-snug line-clamp-4">{selGhostMap.description}</p>
-                )}
-                <p className="text-[10px] text-muted-foreground/60">S2 Underground · GhostMaps</p>
+
+                {/* Structured attributes */}
+                {selGhostMap.attributes && Object.keys(selGhostMap.attributes).length > 0 ? (
+                  <div className="space-y-1 rounded bg-muted/30 p-1.5">
+                    {Object.entries(selGhostMap.attributes).slice(0, 10).map(([k, v]) => (
+                      <div key={k} className="flex gap-2 text-[10px] leading-snug">
+                        <span className="text-muted-foreground/70 shrink-0 w-[80px] truncate">{k}</span>
+                        <span className="text-foreground/90 font-medium flex-1 break-words">{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                <p className="text-[9px] text-muted-foreground/50 pt-0.5">S2 Underground · GhostMaps</p>
               </div>
             </Popup>
           )}
@@ -1159,13 +1273,15 @@ export function ThreatMap() {
             </Source>
           )}
 
-          {/* Cameras (NYC + FAA share one source, filtered per layer) */}
+          {/* Cameras — all sources share one GeoJSON source, filtered per layer */}
           {showAnyCameras && cameras.length > 0 && (
             <Source id="cameras" type="geojson" data={camerasGeoJSON} cluster clusterMaxZoom={12} clusterRadius={40}>
               {showNYCCameras      && <Layer {...nycCameraLayer} />}
               {showFAACameras      && <Layer {...faaCameraLayer} />}
               {showCaltransCameras && <Layer {...caltransCameraLayer} />}
               {showWSDOTCameras    && <Layer {...wsdotCameraLayer} />}
+              {showNDBCBuoys       && <Layer {...ndbcCameraLayer} />}
+              {showNPSCameras      && <Layer {...npsCameraLayer} />}
               <Layer {...cameraLabelLayer} />
             </Source>
           )}

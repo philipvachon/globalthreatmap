@@ -8,7 +8,7 @@ import {
   Camera, CloudRain, Anchor, Zap, Satellite,
   Monitor, Tv2, Eye, Moon,
   Radar, TriangleAlert, Orbit,
-  Map, Type, Box, Globe,
+  Map, Type, Box, Globe, Sun, Mountain,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -89,8 +89,14 @@ export function LayerPanel() {
     showMapLabels,     toggleMapLabels,
     showGoogle3DTiles, toggleGoogle3DTiles,
     showGhostMaps,     toggleGhostMaps,
+    hiddenGhostMapSources, toggleGhostMapSource,
+    showHillshade,     toggleHillshade,
+    showTerrain,       toggleTerrain,
     showCaltransCameras, toggleCaltransCameras,
     showWSDOTCameras,    toggleWSDOTCameras,
+    showNDBCBuoys,       toggleNDBCBuoys,
+    showNPSCameras,      toggleNPSCameras,
+    flyTo, viewport,
   } = useMapStore();
 
   if (collapsed) {
@@ -127,6 +133,30 @@ export function LayerPanel() {
           <ToggleRow label="Events"     active={showClusters}   onToggle={toggleClusters}   icon={<Dot      className="h-3.5 w-3.5" />} iconColor="text-blue-400" />
           <ToggleRow label="Heat Map"   active={showHeatmap}    onToggle={toggleHeatmap}    icon={<Flame    className="h-3.5 w-3.5" />} iconColor="text-orange-400" />
           <ToggleRow label="GhostMaps"  active={showGhostMaps}  onToggle={toggleGhostMaps}  icon={<Globe    className="h-3.5 w-3.5" />} iconColor="text-amber-400" badge="S2" />
+          {showGhostMaps && (
+            <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border/50 pl-2">
+              {([
+                { source: "cip",    label: "📍 CIP",          color: "text-amber-400" },
+                { source: "border", label: "🚨 Border Crisis", color: "text-red-400"   },
+              ] as const).map(({ source, label, color }) => (
+                <button
+                  key={source}
+                  onClick={() => toggleGhostMapSource(source)}
+                  className={cn(
+                    "flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-[10px] transition-colors",
+                    !hiddenGhostMapSources.includes(source)
+                      ? "text-muted-foreground hover:text-foreground"
+                      : "text-muted-foreground/50 hover:text-muted-foreground"
+                  )}
+                >
+                  <span className={cn("shrink-0", color)}>{label}</span>
+                  <span className={cn("ml-auto h-1.5 w-1.5 shrink-0 rounded-full",
+                    !hiddenGhostMapSources.includes(source) ? "bg-green-400" : "bg-muted"
+                  )} />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── Tracking ────────────────────────────── */}
@@ -228,7 +258,7 @@ export function LayerPanel() {
           <ToggleRow
             label="NYC Cameras"
             active={showNYCCameras}
-            onToggle={toggleNYCCameras}
+            onToggle={() => { toggleNYCCameras(); if (!showNYCCameras && viewport.zoom < 12) flyTo(-73.935, 40.730, 12); }}
             icon={<Camera className="h-3.5 w-3.5" />}
             iconColor="text-teal-400"
             loading={camerasLoading && showNYCCameras}
@@ -236,7 +266,7 @@ export function LayerPanel() {
           <ToggleRow
             label="FAA Cams"
             active={showFAACameras}
-            onToggle={toggleFAACameras}
+            onToggle={() => { toggleFAACameras(); if (!showFAACameras && viewport.zoom < 4) flyTo(-98.5, 39.5, 4); }}
             icon={<CloudRain className="h-3.5 w-3.5" />}
             iconColor="text-indigo-400"
             loading={camerasLoading && showFAACameras}
@@ -244,7 +274,7 @@ export function LayerPanel() {
           <ToggleRow
             label="Caltrans"
             active={showCaltransCameras}
-            onToggle={toggleCaltransCameras}
+            onToggle={() => { toggleCaltransCameras(); if (!showCaltransCameras && viewport.zoom < 6) flyTo(-119.5, 37.3, 6); }}
             icon={<Camera className="h-3.5 w-3.5" />}
             iconColor="text-orange-400"
             loading={camerasLoading && showCaltransCameras}
@@ -253,11 +283,29 @@ export function LayerPanel() {
           <ToggleRow
             label="WSDOT"
             active={showWSDOTCameras}
-            onToggle={toggleWSDOTCameras}
+            onToggle={() => { toggleWSDOTCameras(); if (!showWSDOTCameras && viewport.zoom < 7) flyTo(-120.5, 47.5, 7); }}
             icon={<Camera className="h-3.5 w-3.5" />}
             iconColor="text-violet-400"
             loading={camerasLoading && showWSDOTCameras}
             badge="WA"
+          />
+          <ToggleRow
+            label="NDBC BuoyCam"
+            active={showNDBCBuoys}
+            onToggle={() => { toggleNDBCBuoys(); if (!showNDBCBuoys && viewport.zoom < 4) flyTo(-90, 30, 4); }}
+            icon={<CloudRain className="h-3.5 w-3.5" />}
+            iconColor="text-cyan-400"
+            loading={camerasLoading && showNDBCBuoys}
+            badge="NOAA"
+          />
+          <ToggleRow
+            label="NPS Webcams"
+            active={showNPSCameras}
+            onToggle={() => { toggleNPSCameras(); if (!showNPSCameras && viewport.zoom < 4) flyTo(-98.5, 39.5, 4); }}
+            icon={<Camera className="h-3.5 w-3.5" />}
+            iconColor="text-green-400"
+            loading={camerasLoading && showNPSCameras}
+            badge="NPS"
           />
         </div>
 
@@ -296,16 +344,29 @@ export function LayerPanel() {
               </button>
             </div>
           )}
-          {!!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && (
-            <ToggleRow
-              label="3D Tiles"
-              active={showGoogle3DTiles}
-              onToggle={toggleGoogle3DTiles}
-              icon={<Box className="h-3.5 w-3.5" />}
-              iconColor="text-emerald-400"
-              badge="Google"
-            />
-          )}
+          <ToggleRow
+            label="3D Tiles"
+            active={showGoogle3DTiles}
+            onToggle={toggleGoogle3DTiles}
+            icon={<Box className="h-3.5 w-3.5" />}
+            iconColor="text-emerald-400"
+            badge="Google"
+          />
+          <ToggleRow
+            label="Hillshade"
+            active={showHillshade}
+            onToggle={toggleHillshade}
+            icon={<Sun className="h-3.5 w-3.5" />}
+            iconColor="text-yellow-400"
+            badge="ESRI"
+          />
+          <ToggleRow
+            label="3D Terrain"
+            active={showTerrain}
+            onToggle={toggleTerrain}
+            icon={<Mountain className="h-3.5 w-3.5" />}
+            iconColor="text-stone-400"
+          />
         </div>
 
         {/* ── Environment ──────────────────────────── */}

@@ -83,22 +83,62 @@ function extractGeometry(pm: any): GeoJSON.Geometry | null {
   return null;
 }
 
+// Internal GIS fields not useful to show in popups
+const GIS_INTERNAL = new Set(["OBJECTID", "Shape", "Shape_Length", "Shape_Area", "GlobalID", "FID"]);
+
+/**
+ * Parse an ArcGIS-generated HTML description table into a JSON string of
+ * { key: value } pairs, filtering out empty/null/internal GIS fields.
+ * Returns undefined if no useful attributes are found.
+ */
+function parseArcGISHtml(html: string): string | undefined {
+  const attrs: Record<string, string> = {};
+  const rowPattern = /<tr[^>]*>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi;
+  let match;
+  while ((match = rowPattern.exec(html)) !== null) {
+    const key = match[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim();
+    const val = match[2].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim();
+    if (key && val && val.toLowerCase() !== "null" && !GIS_INTERNAL.has(key)) {
+      attrs[key] = val;
+    }
+  }
+  return Object.keys(attrs).length > 0 ? JSON.stringify(attrs) : undefined;
+}
+
+function folderToEmoji(folder: string): string {
+  const f = folder.toLowerCase();
+  if (f.includes("border") || f.includes("crossing") || f.includes("patrol")) return "🚨";
+  if (f.includes("cartel") || f.includes("narco") || f.includes("gang") || f.includes("smuggl")) return "⚠️";
+  if (f.includes("military") || f.includes("base") || f.includes("fort") || f.includes("army") || f.includes("guard") || f.includes("defense")) return "🪖";
+  if (f.includes("law") || f.includes("police") || f.includes("sheriff") || f.includes("enforcement") || f.includes("cbp") || f.includes("agent")) return "🛡️";
+  if (f.includes("fire") || f.includes("wildfire") || f.includes("incident")) return "🔥";
+  if (f.includes("medical") || f.includes("hospital") || f.includes("ems") || f.includes("health")) return "🏥";
+  if (f.includes("nuclear") || f.includes("chemical") || f.includes("hazmat") || f.includes("cbrn")) return "☢️";
+  if (f.includes("power") || f.includes("electric") || f.includes("energy") || f.includes("utility")) return "⚡";
+  if (f.includes("water") || f.includes("dam") || f.includes("flood")) return "💧";
+  if (f.includes("aviation") || f.includes("airport") || f.includes("flight")) return "✈️";
+  if (f.includes("government") || f.includes("federal") || f.includes("capitol")) return "🏛️";
+  if (f.includes("school") || f.includes("education") || f.includes("university")) return "🏫";
+  if (f.includes("communication") || f.includes("telecom") || f.includes("radio") || f.includes("tower")) return "📡";
+  if (f.includes("transport") || f.includes("rail") || f.includes("highway") || f.includes("bridge") || f.includes("route")) return "🛣️";
+  if (f.includes("camp") || f.includes("staging") || f.includes("shelter")) return "⛺";
+  if (f.includes("infrastructure") || f.includes("critical")) return "🏭";
+  return "📍";
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function placemarkToFeature(pm: any, source: string, folder: string): GeoJSON.Feature | null {
   const geometry = extractGeometry(pm);
   if (!geometry) return null;
 
   const name = String(pm.name ?? "").trim() || undefined;
-  // Strip HTML tags from ArcGIS-generated description
-  const description = String(pm.description ?? "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim() || undefined;
+  const attributesJson = parseArcGISHtml(String(pm.description ?? ""));
+  const iconEmoji = folderToEmoji(folder);
 
   return {
     type: "Feature",
     geometry,
-    properties: { name, description, source, folder },
+    properties: { name, attributesJson, source, folder, iconEmoji },
   };
 }
 

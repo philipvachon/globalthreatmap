@@ -4,6 +4,7 @@
   "description": "Global Threat & Event Intelligence Map - Real-time situational awareness platform",
   "scripts": {
     "dev": "next dev",
+    "dev:webpack": "next dev --no-turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

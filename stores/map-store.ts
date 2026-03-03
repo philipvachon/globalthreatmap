@@ -42,7 +42,7 @@ export interface CameraMarker {
   latitude: number;
   longitude: number;
   imageUrl: string;
-  source: "nyc" | "faa" | "caltrans" | "wsdot";
+  source: "nyc" | "faa" | "caltrans" | "wsdot" | "ndbc" | "nps";
   isOnline: boolean;
 }
 
@@ -100,6 +100,8 @@ interface MapState {
   showFAACameras: boolean;
   showCaltransCameras: boolean;
   showWSDOTCameras: boolean;
+  showNDBCBuoys: boolean;
+  showNPSCameras: boolean;
   showMaritime: boolean;
   showFire: boolean;
   showWeather: boolean;
@@ -135,10 +137,13 @@ interface MapState {
   hiddenSatCategories: string[];
   geolocatePin: GeolocatePin | null;
   sidebarCollapsed: boolean;
-  showSatelliteBase: boolean;   // enables Mapbox satellite base map at zoom ≥ 10
-  showMapLabels: boolean;       // shows POI/street labels on satellite base map
-  showGoogle3DTiles: boolean;   // enables Google Photorealistic 3D Tiles at zoom ≥ 15
-  showGhostMaps: boolean;       // S2 Underground GhostMaps CIP + Border Crisis KMZ overlay
+  showSatelliteBase: boolean;      // enables Mapbox satellite base map at zoom ≥ 10
+  showMapLabels: boolean;          // shows POI/street labels on satellite base map
+  showGoogle3DTiles: boolean;      // enables Google Photorealistic 3D Tiles at zoom ≥ 15
+  showGhostMaps: boolean;          // S2 Underground GhostMaps CIP + Border Crisis KMZ overlay
+  hiddenGhostMapSources: string[]; // [] = all visible; ["cip"] / ["border"] = hide that source
+  showHillshade: boolean;          // ArcGIS World Hillshade raster overlay
+  showTerrain: boolean;            // Mapbox 3D terrain exaggeration
 
   setViewport: (viewport: Partial<MapViewport>) => void;
   flyTo: (longitude: number, latitude: number, zoom?: number) => void;
@@ -153,6 +158,8 @@ interface MapState {
   toggleFAACameras: () => void;
   toggleCaltransCameras: () => void;
   toggleWSDOTCameras: () => void;
+  toggleNDBCBuoys: () => void;
+  toggleNPSCameras: () => void;
   toggleMaritime: () => void;
   toggleFire: () => void;
   toggleWeather: () => void;
@@ -195,6 +202,9 @@ interface MapState {
   toggleMapLabels: () => void;
   toggleGoogle3DTiles: () => void;
   toggleGhostMaps: () => void;
+  toggleGhostMapSource: (source: string) => void;
+  toggleHillshade: () => void;
+  toggleTerrain: () => void;
 }
 
 const DEFAULT_VIEWPORT: MapViewport = {
@@ -218,6 +228,8 @@ export const useMapStore = create<MapState>((set) => ({
   showFAACameras: false,
   showCaltransCameras: false,
   showWSDOTCameras: false,
+  showNDBCBuoys: false,
+  showNPSCameras: false,
   showMaritime: false,
   showFire: false,
   showWeather: false,
@@ -256,6 +268,9 @@ export const useMapStore = create<MapState>((set) => ({
   showMapLabels: true,
   showGoogle3DTiles: true,
   showGhostMaps: false,
+  hiddenGhostMapSources: [],
+  showHillshade: false,
+  showTerrain: false,
 
   setViewport: (viewport) =>
     set((state) => ({ viewport: { ...state.viewport, ...viewport } })),
@@ -274,6 +289,8 @@ export const useMapStore = create<MapState>((set) => ({
   toggleFAACameras:      () => set((s) => ({ showFAACameras:      !s.showFAACameras })),
   toggleCaltransCameras: () => set((s) => ({ showCaltransCameras: !s.showCaltransCameras })),
   toggleWSDOTCameras:    () => set((s) => ({ showWSDOTCameras:    !s.showWSDOTCameras })),
+  toggleNDBCBuoys:       () => set((s) => ({ showNDBCBuoys:       !s.showNDBCBuoys })),
+  toggleNPSCameras:      () => set((s) => ({ showNPSCameras:      !s.showNPSCameras })),
   toggleMaritime:      () => set((s) => ({ showMaritime:      !s.showMaritime })),
   toggleFire:          () => set((s) => ({ showFire:          !s.showFire })),
   toggleWeather:       () => set((s) => ({ showWeather:       !s.showWeather })),
@@ -346,4 +363,12 @@ export const useMapStore = create<MapState>((set) => ({
   toggleMapLabels:      () => set((s) => ({ showMapLabels:      !s.showMapLabels })),
   toggleGoogle3DTiles:  () => set((s) => ({ showGoogle3DTiles:  !s.showGoogle3DTiles })),
   toggleGhostMaps:      () => set((s) => ({ showGhostMaps:      !s.showGhostMaps })),
+  toggleGhostMapSource: (source) =>
+    set((s) => ({
+      hiddenGhostMapSources: s.hiddenGhostMapSources.includes(source)
+        ? s.hiddenGhostMapSources.filter((x) => x !== source)
+        : [...s.hiddenGhostMapSources, source],
+    })),
+  toggleHillshade: () => set((s) => ({ showHillshade: !s.showHillshade })),
+  toggleTerrain:   () => set((s) => ({ showTerrain:   !s.showTerrain })),
 }));
