@@ -89,6 +89,8 @@ export function LayerPanel() {
     showMapLabels,     toggleMapLabels,
     showGoogle3DTiles, toggleGoogle3DTiles,
     showGhostMaps,     toggleGhostMaps,
+    showCaltransCameras, toggleCaltransCameras,
+    showWSDOTCameras,    toggleWSDOTCameras,
   } = useMapStore();
 
   if (collapsed) {
@@ -118,7 +120,7 @@ export function LayerPanel() {
         </button>
       </div>
 
-      <div className="pb-1.5">
+      <div className="pb-1.5 overflow-y-auto" style={{ maxHeight: "calc(100vh - 5rem)", scrollbarWidth: "thin" }}>
         {/* ── Events ──────────────────────────────── */}
         <SectionLabel label="Events" />
         <div className="px-1 space-y-0.5">
@@ -238,6 +240,24 @@ export function LayerPanel() {
             icon={<CloudRain className="h-3.5 w-3.5" />}
             iconColor="text-indigo-400"
             loading={camerasLoading && showFAACameras}
+          />
+          <ToggleRow
+            label="Caltrans"
+            active={showCaltransCameras}
+            onToggle={toggleCaltransCameras}
+            icon={<Camera className="h-3.5 w-3.5" />}
+            iconColor="text-orange-400"
+            loading={camerasLoading && showCaltransCameras}
+            badge="CA"
+          />
+          <ToggleRow
+            label="WSDOT"
+            active={showWSDOTCameras}
+            onToggle={toggleWSDOTCameras}
+            icon={<Camera className="h-3.5 w-3.5" />}
+            iconColor="text-violet-400"
+            loading={camerasLoading && showWSDOTCameras}
+            badge="WA"
           />
         </div>
 

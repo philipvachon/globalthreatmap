@@ -5,38 +5,44 @@ import { useMapStore } from "@/stores/map-store";
 
 const REFRESH_INTERVAL = 300_000; // 5 minutes — camera list changes slowly
 
+type CameraSource = "nyc" | "faa" | "caltrans" | "wsdot";
+
 export function useCameras() {
-  const { showNYCCameras, showFAACameras, setCameras, setCamerasLoading, cameras } = useMapStore();
+  const {
+    showNYCCameras, showFAACameras, showCaltransCameras, showWSDOTCameras,
+    setCameras, setCamerasLoading, cameras,
+  } = useMapStore();
+  const camerasRef = useRef(cameras);
+  camerasRef.current = cameras;
+
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const anyActive = showNYCCameras || showFAACameras;
+  const activeSources: CameraSource[] = [
+    ...(showNYCCameras      ? ["nyc"      as const] : []),
+    ...(showFAACameras      ? ["faa"      as const] : []),
+    ...(showCaltransCameras ? ["caltrans" as const] : []),
+    ...(showWSDOTCameras    ? ["wsdot"    as const] : []),
+  ];
+  const anyActive = activeSources.length > 0;
 
-  async function fetchCameras() {
-    // Determine which source(s) to fetch
-    const source = showNYCCameras && showFAACameras ? "all"
-      : showNYCCameras ? "nyc"
-      : showFAACameras ? "faa"
-      : null;
-    if (!source) return;
+  async function fetchSource(src: CameraSource) {
+    try {
+      const res = await fetch(`/api/cameras?source=${src}`);
+      const data = await res.json();
+      if (!Array.isArray(data.cameras)) return;
+      // Replace only this source's cameras; keep other sources intact
+      setCameras([
+        ...camerasRef.current.filter((c) => c.source !== src),
+        ...data.cameras,
+      ]);
+    } catch { /* ignore */ }
+  }
 
+  async function fetchAllActive() {
+    if (activeSources.length === 0) return;
     setCamerasLoading(true);
     try {
-      const res = await fetch(`/api/cameras?source=${source}`);
-      const data = await res.json();
-      if (Array.isArray(data.cameras)) {
-        // Merge: keep cameras from other source if only one changed
-        if (source === "nyc") {
-          const faaCams = cameras.filter((c) => c.source === "faa");
-          setCameras([...data.cameras, ...faaCams]);
-        } else if (source === "faa") {
-          const nycCams = cameras.filter((c) => c.source === "nyc");
-          setCameras([...nycCams, ...data.cameras]);
-        } else {
-          setCameras(data.cameras);
-        }
-      }
-    } catch {
-      // ignore
+      await Promise.allSettled(activeSources.map(fetchSource));
     } finally {
       setCamerasLoading(false);
     }
@@ -44,23 +50,16 @@ export function useCameras() {
 
   useEffect(() => {
     if (!anyActive) {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
       setCameras([]);
       return;
     }
 
-    fetchCameras();
-    intervalRef.current = setInterval(fetchCameras, REFRESH_INTERVAL);
-
+    fetchAllActive();
+    intervalRef.current = setInterval(fetchAllActive, REFRESH_INTERVAL);
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showNYCCameras, showFAACameras]);
+  }, [showNYCCameras, showFAACameras, showCaltransCameras, showWSDOTCameras]);
 }

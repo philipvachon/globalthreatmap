@@ -267,6 +267,34 @@ const faaCameraLayer: LayerProps = {
   },
 };
 
+const caltransCameraLayer: LayerProps = {
+  id: "caltrans-cameras",
+  type: "circle",
+  minzoom: 8,
+  filter: ["==", ["get", "source"], "caltrans"],
+  paint: {
+    "circle-color": "#f97316",
+    "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3, 14, 6],
+    "circle-stroke-width": 1.5,
+    "circle-stroke-color": "#ffffff",
+    "circle-opacity": 0.85,
+  },
+};
+
+const wsdotCameraLayer: LayerProps = {
+  id: "wsdot-cameras",
+  type: "circle",
+  minzoom: 8,
+  filter: ["==", ["get", "source"], "wsdot"],
+  paint: {
+    "circle-color": "#a78bfa",
+    "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3, 14, 6],
+    "circle-stroke-width": 1.5,
+    "circle-stroke-color": "#ffffff",
+    "circle-opacity": ["case", ["get", "isOnline"], 0.9, 0.4],
+  },
+};
+
 // Camera label (only at high zoom)
 const cameraLabelLayer: LayerProps = {
   id: "camera-labels",
@@ -439,7 +467,8 @@ const satelliteDotsLayer: LayerProps = {
   id: "satellite-dots",
   type: "circle",
   paint: {
-    "circle-color": SAT_COLOR_EXPR as LayerProps["paint"],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    "circle-color": SAT_COLOR_EXPR as any,
     "circle-radius": [
       "case",
       [">", ["get", "altKm"], 35000], 5,  // GEO
@@ -466,7 +495,8 @@ const satelliteNameLayer: LayerProps = {
     "text-max-width": 10,
   },
   paint: {
-    "text-color": SAT_COLOR_EXPR as LayerProps["paint"],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    "text-color": SAT_COLOR_EXPR as any,
     "text-halo-color": "#000000",
     "text-halo-width": 1,
     "text-opacity": 0.75,
@@ -511,7 +541,7 @@ export function ThreatMap() {
     showAircraft, aircraft, hiddenAircraftTypes,
     showSeismic, earthquakes,
     showTraffic,
-    showNYCCameras, showFAACameras, cameras,
+    showNYCCameras, showFAACameras, showCaltransCameras, showWSDOTCameras, cameras,
     showMaritime, vessels,
     showFire,
     showWeather, weatherPath, weatherHost,
@@ -795,64 +825,20 @@ export function ThreatMap() {
     if (showClusters) ids.unshift("clusters");
     if (showAircraft) ids.push("aircraft-points");
     if (showSeismic) ids.push("seismic-points");
-    if (showNYCCameras) ids.push("nyc-cameras");
-    if (showFAACameras) ids.push("faa-cameras");
+    if (showNYCCameras)      ids.push("nyc-cameras");
+    if (showFAACameras)      ids.push("faa-cameras");
+    if (showCaltransCameras) ids.push("caltrans-cameras");
+    if (showWSDOTCameras)    ids.push("wsdot-cameras");
     if (showMaritime) ids.push("vessel-points");
     if (showAlerts) ids.push("alerts-fill");
     if (showGhostMaps) ids.push("ghostmaps-point", "ghostmaps-fill");
     if (showSatellites) ids.push("satellite-dots");
     return ids;
-  }, [showClusters, showAircraft, showSeismic, showNYCCameras, showFAACameras, showMaritime, showAlerts, showGhostMaps, showSatellites]);
+  }, [showClusters, showAircraft, showSeismic, showNYCCameras, showFAACameras, showCaltransCameras, showWSDOTCameras, showMaritime, showAlerts, showGhostMaps, showSatellites]);
 
   // ─── Map click handler ───────────────────────────────────────────────────────
 
   const handleMapClick = useCallback(async (event: MapMouseEvent) => {
-    // ── Satellite 3-D hit-test ────────────────────────────────────────────────
-    // CustomLayer isn't in interactiveLayerIds so we do our own screen-space
-    // nearest-neighbour search using the camera's mercator matrix for accuracy.
-    if (showSatellites && mapRef.current) {
-      const map  = mapRef.current.getMap();
-      if (map.getZoom() <= 4.5) {
-        const cx = event.point.x;
-        const cy = event.point.y;
-        const HIT_PX = 14;
-        let closest: (typeof visibleSatPositions)[0] | null = null;
-        let bestDist = HIT_PX;
-        for (const sat of visibleSatPositions) {
-          const sp = projectSatToScreen(map, sat.longitude, sat.latitude, sat.altKm);
-          if (!sp) continue;
-          const d = Math.hypot(sp.x - cx, sp.y - cy);
-          if (d < bestDist) { bestDist = d; closest = sat; }
-        }
-        if (closest) {
-          clearPopups();
-          const track: [number, number][] = [];
-          try {
-            const satrec = twoline2satrec(closest.tle1, closest.tle2);
-            const base   = Date.now();
-            for (let min = 0; min <= 90; min += 2) {
-              const t   = new Date(base + min * 60_000);
-              const pv  = propagate(satrec, t);
-              if (!pv || !pv.position) continue;
-              const gst = gstime(t);
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const geo = eciToGeodetic(pv.position as any, gst);
-              const lat = degreesLat(geo.latitude);
-              const lng = degreesLong(geo.longitude);
-              if (isFinite(lat) && isFinite(lng)) track.push([lng, lat]);
-            }
-          } catch { /* ignore */ }
-          setSelSatellite({
-            longitude: closest.longitude, latitude: closest.latitude,
-            name: closest.name, noradId: closest.noradId,
-            altKm: closest.altKm, inclination: closest.inclination,
-            category: closest.category, tle1: closest.tle1, tle2: closest.tle2, track,
-          });
-          return;
-        }
-      }
-    }
-
     if (event.features?.length) {
       const feat = event.features[0];
       const lid = feat.layer?.id;
@@ -891,7 +877,7 @@ export function ThreatMap() {
         setSelQuake({ longitude: coords[0], latitude: coords[1], magnitude: props.magnitude, place: props.place, time: props.time, depth: props.depth });
         return;
       }
-      if (lid === "nyc-cameras" || lid === "faa-cameras") {
+      if (lid === "nyc-cameras" || lid === "faa-cameras" || lid === "caltrans-cameras" || lid === "wsdot-cameras") {
         setSelCamera({ longitude: coords[0], latitude: coords[1], id: props.id });
         setCameraExpanded(false);
         return;
@@ -907,6 +893,32 @@ export function ThreatMap() {
       }
       if (lid === "ghostmaps-point" || lid === "ghostmaps-fill") {
         setSelGhostMap({ longitude: event.lngLat.lng, latitude: event.lngLat.lat, name: props.name, description: props.description, source: props.source, folder: props.folder });
+        return;
+      }
+      if (lid === "satellite-dots") {
+        clearPopups();
+        const track: [number, number][] = [];
+        try {
+          const satrec = twoline2satrec(props.tle1, props.tle2);
+          const base   = Date.now();
+          for (let min = 0; min <= 90; min += 2) {
+            const t  = new Date(base + min * 60_000);
+            const pv = propagate(satrec, t);
+            if (!pv || !pv.position) continue;
+            const gst = gstime(t);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const geo = eciToGeodetic(pv.position as any, gst);
+            const lat = degreesLat(geo.latitude);
+            const lng = degreesLong(geo.longitude);
+            if (isFinite(lat) && isFinite(lng)) track.push([lng, lat]);
+          }
+        } catch { /* ignore */ }
+        setSelSatellite({
+          longitude: coords[0], latitude: coords[1],
+          name: props.name, noradId: props.noradId,
+          altKm: Number(props.altKm), inclination: Number(props.inclination),
+          category: props.category, tle1: props.tle1, tle2: props.tle2, track,
+        });
         return;
       }
       return;
@@ -928,7 +940,7 @@ export function ThreatMap() {
       }
     } catch { /* ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredEvents, selectEvent, viewport.zoom, checkLimit, requiresAuth, isAuthenticated, initialized, showSatellites, satellitePositions]);
+  }, [filteredEvents, selectEvent, viewport.zoom, checkLimit, requiresAuth, isAuthenticated, initialized]);
 
   const handleMouseEnter = useCallback(() => { if (mapRef.current) mapRef.current.getCanvas().style.cursor = "pointer"; }, []);
   const handleMouseLeave = useCallback(() => { if (mapRef.current) mapRef.current.getCanvas().style.cursor = ""; }, []);
@@ -947,13 +959,12 @@ export function ThreatMap() {
     );
   }
 
-  const showAnyCameras = showNYCCameras || showFAACameras;
+  const showAnyCameras = showNYCCameras || showFAACameras || showCaltransCameras || showWSDOTCameras;
   const cssFilter = VISUAL_FILTERS[visualMode] ?? "";
 
-  // Base map: dark by default; switches to satellite when enabled and zoom ≥ 10.
-  // showMapLabels controls whether satellite-streets (labels/POIs) or pure
-  // satellite-v9 (no labels) is used when the satellite base map is active.
-  const mapStyle = showSatelliteBase && viewport.zoom >= 10
+  // Base map: satellite when enabled (all zoom levels), dark otherwise.
+  // showMapLabels controls satellite-streets-v12 (labels/POIs) vs satellite-v9 (clean).
+  const mapStyle = showSatelliteBase
     ? showMapLabels
       ? "mapbox://styles/mapbox/satellite-streets-v12"
       : "mapbox://styles/mapbox/satellite-v9"
@@ -1067,7 +1078,13 @@ export function ThreatMap() {
             </Popup>
           )}
 
-          {/* satellite-3d-orbits custom WebGL layer is managed imperatively via satLayerRef */}
+          {/* Satellite orbit dots — GeoJSON circles, one per propagated satellite */}
+          {showSatellites && visibleSatGeoJSON.features.length > 0 && (
+            <Source id="satellite-dots" type="geojson" data={visibleSatGeoJSON}>
+              <Layer {...satelliteDotsLayer} />
+              <Layer {...satelliteNameLayer} />
+            </Source>
+          )}
 
           {/* Selected satellite ground track — ground-level dashed line */}
           {selSatellite && satTrackGeoJSON && (
@@ -1145,8 +1162,10 @@ export function ThreatMap() {
           {/* Cameras (NYC + FAA share one source, filtered per layer) */}
           {showAnyCameras && cameras.length > 0 && (
             <Source id="cameras" type="geojson" data={camerasGeoJSON} cluster clusterMaxZoom={12} clusterRadius={40}>
-              {showNYCCameras && <Layer {...nycCameraLayer} />}
-              {showFAACameras && <Layer {...faaCameraLayer} />}
+              {showNYCCameras      && <Layer {...nycCameraLayer} />}
+              {showFAACameras      && <Layer {...faaCameraLayer} />}
+              {showCaltransCameras && <Layer {...caltransCameraLayer} />}
+              {showWSDOTCameras    && <Layer {...wsdotCameraLayer} />}
               <Layer {...cameraLabelLayer} />
             </Source>
           )}

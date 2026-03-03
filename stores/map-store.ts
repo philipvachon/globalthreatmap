@@ -42,7 +42,7 @@ export interface CameraMarker {
   latitude: number;
   longitude: number;
   imageUrl: string;
-  source: "nyc" | "faa";
+  source: "nyc" | "faa" | "caltrans" | "wsdot";
   isOnline: boolean;
 }
 
@@ -98,6 +98,8 @@ interface MapState {
   showTraffic: boolean;
   showNYCCameras: boolean;
   showFAACameras: boolean;
+  showCaltransCameras: boolean;
+  showWSDOTCameras: boolean;
   showMaritime: boolean;
   showFire: boolean;
   showWeather: boolean;
@@ -149,6 +151,8 @@ interface MapState {
   toggleTraffic: () => void;
   toggleNYCCameras: () => void;
   toggleFAACameras: () => void;
+  toggleCaltransCameras: () => void;
+  toggleWSDOTCameras: () => void;
   toggleMaritime: () => void;
   toggleFire: () => void;
   toggleWeather: () => void;
@@ -212,6 +216,8 @@ export const useMapStore = create<MapState>((set) => ({
   showTraffic: false,
   showNYCCameras: false,
   showFAACameras: false,
+  showCaltransCameras: false,
+  showWSDOTCameras: false,
   showMaritime: false,
   showFire: false,
   showWeather: false,
@@ -264,8 +270,10 @@ export const useMapStore = create<MapState>((set) => ({
   toggleAircraft:      () => set((s) => ({ showAircraft:      !s.showAircraft })),
   toggleSeismic:       () => set((s) => ({ showSeismic:       !s.showSeismic })),
   toggleTraffic:       () => set((s) => ({ showTraffic:       !s.showTraffic })),
-  toggleNYCCameras:    () => set((s) => ({ showNYCCameras:    !s.showNYCCameras })),
-  toggleFAACameras:    () => set((s) => ({ showFAACameras:    !s.showFAACameras })),
+  toggleNYCCameras:      () => set((s) => ({ showNYCCameras:      !s.showNYCCameras })),
+  toggleFAACameras:      () => set((s) => ({ showFAACameras:      !s.showFAACameras })),
+  toggleCaltransCameras: () => set((s) => ({ showCaltransCameras: !s.showCaltransCameras })),
+  toggleWSDOTCameras:    () => set((s) => ({ showWSDOTCameras:    !s.showWSDOTCameras })),
   toggleMaritime:      () => set((s) => ({ showMaritime:      !s.showMaritime })),
   toggleFire:          () => set((s) => ({ showFire:          !s.showFire })),
   toggleWeather:       () => set((s) => ({ showWeather:       !s.showWeather })),

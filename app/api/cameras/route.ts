@@ -81,11 +81,73 @@ function parseFAAResponse(data: unknown): CameraMarker[] {
     .filter((c): c is CameraMarker => c !== null);
 }
 
+// ─── Caltrans Traffic Cameras ─────────────────────────────────────────────────
+// California DOT CWWP2 public API — no auth required, updated continuously
+const CALTRANS_URL = "https://cwwp2.dot.ca.gov/data/d1/cctv/cctvStatusD01.json";
+// The CWWP2 system has per-district endpoints; we fetch district 1 as a test.
+// A more complete fetch would loop over all 12 districts.
+const CALTRANS_DISTRICTS = Array.from({ length: 12 }, (_, i) =>
+  `https://cwwp2.dot.ca.gov/data/d${String(i + 1).padStart(2, "0").replace(/^d0/, "d")}/cctv/cctvStatusD${String(i + 1).padStart(2, "0")}.json`
+);
+
+function parseCaltransResponse(data: unknown, district: number): CameraMarker[] {
+  // CWWP2 format: { data: { cctv: [ { location: { lat, lon }, cctvDescription, imageData: { static: { currentImageURL } } } ] } }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cctvList: any[] = (data as any)?.data?.cctv ?? (data as any)?.cctv ?? [];
+  if (!Array.isArray(cctvList)) return [];
+
+  return cctvList
+    .map((item): CameraMarker | null => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = item?.cctv ?? item;
+      const lat = parseFloat(c?.location?.latitude ?? c?.location?.lat ?? "");
+      const lng = parseFloat(c?.location?.longitude ?? c?.location?.lon ?? "");
+      if (!isFinite(lat) || !isFinite(lng)) return null;
+      if (lat === 0 && lng === 0) return null;
+
+      const id = String(c?.cctvId ?? c?.id ?? `caltrans-d${district}-${lat}-${lng}`);
+      const name = String(c?.cctvDescription ?? c?.description ?? `Caltrans D${district}`).trim();
+      const imageUrl = String(
+        c?.imageData?.static?.currentImageURL ??
+        c?.imageData?.static?.imageURL ??
+        c?.imageURL ?? ""
+      );
+      if (!imageUrl) return null;
+
+      return { id: `caltrans-${id}`, name, latitude: lat, longitude: lng, imageUrl, source: "caltrans" as const, isOnline: true };
+    })
+    .filter((c): c is CameraMarker => c !== null);
+}
+
+// ─── WSDOT Traffic Cameras ────────────────────────────────────────────────────
+// Washington State DOT — free API key from wsdot.wa.gov/traffic/api
+// Set NEXT_PUBLIC_WSDOT_API_KEY in .env.local
+const WSDOT_URL = "https://wsdot.wa.gov/Traffic/api/HighwayCameras/HighwayCamerasREST.svc/GetCamerasAsJson";
+
+function parseWSDOTResponse(data: unknown): CameraMarker[] {
+  const arr: unknown[] = Array.isArray(data) ? data : [];
+  return arr
+    .map((item): CameraMarker | null => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = item as any;
+      const lat = Number(c?.CameraLocation?.Latitude ?? 0);
+      const lng = Number(c?.CameraLocation?.Longitude ?? 0);
+      if (!isFinite(lat) || !isFinite(lng) || (lat === 0 && lng === 0)) return null;
+      const id = String(c?.CameraID ?? c?.SortOrder ?? "");
+      if (!id) return null;
+      const name = String(c?.Title ?? c?.Description ?? `WSDOT ${id}`).trim();
+      const imageUrl = String(c?.ImageURL ?? c?.CameraOwner ?? "");
+      if (!imageUrl) return null;
+      return { id: `wsdot-${id}`, name, latitude: lat, longitude: lng, imageUrl, source: "wsdot" as const, isOnline: Boolean(c?.IsActive) };
+    })
+    .filter((c): c is CameraMarker => c !== null);
+}
+
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const source = searchParams.get("source") ?? "nyc"; // "nyc" | "faa" | "all"
+  const source = searchParams.get("source") ?? "nyc"; // "nyc" | "faa" | "caltrans" | "wsdot" | "all"
 
   const cameras: CameraMarker[] = [];
 
@@ -116,6 +178,42 @@ export async function GET(request: Request) {
       }
     } catch {
       // Non-fatal
+    }
+  }
+
+  if (source === "caltrans" || source === "all") {
+    // Fetch all 12 Caltrans districts in parallel; skip failures
+    const districtNums = Array.from({ length: 12 }, (_, i) => i + 1);
+    const districtUrls = districtNums.map(
+      (d) => `https://cwwp2.dot.ca.gov/data/d${String(d).padStart(2, "0")}/cctv/cctvStatusD${String(d).padStart(2, "0")}.json`
+    );
+    const districtResults = await Promise.allSettled(
+      districtUrls.map((url, idx) =>
+        fetch(url, { next: { revalidate: 300 } })
+          .then((r) => r.ok ? r.json() : null)
+          .then((data) => data ? parseCaltransResponse(data, idx + 1) : [])
+          .catch(() => [])
+      )
+    );
+    for (const result of districtResults) {
+      if (result.status === "fulfilled") cameras.push(...result.value);
+    }
+  }
+
+  if (source === "wsdot" || source === "all") {
+    const wsdotKey = process.env.WSDOT_API_KEY;
+    if (wsdotKey) {
+      try {
+        const res = await fetch(`${WSDOT_URL}?AccessCode=${wsdotKey}`, {
+          next: { revalidate: 300 },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          cameras.push(...parseWSDOTResponse(data));
+        }
+      } catch {
+        // Non-fatal
+      }
     }
   }
 
