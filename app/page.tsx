@@ -8,6 +8,8 @@ import { ThreatMap } from "@/components/map/threat-map";
 import { TimelineScrubber } from "@/components/map/timeline-scrubber";
 import { LayerPanel } from "@/components/map/layer-panel";
 import { SatelliteControls } from "@/components/map/satellite-controls";
+import { HudBanner } from "@/components/map/hud-banner";
+import { CityFlyBar } from "@/components/map/city-fly-bar";
 import { WelcomeModal } from "@/components/welcome-modal";
 import { SignInPanel, SignInModal } from "@/components/auth";
 import { PolymarketTicker, POLYMARKET_TICKER_HEIGHT } from "@/components/polymarket-ticker";
@@ -38,15 +40,21 @@ export default function Home() {
         <div className="relative flex-1">
           <ThreatMap />
 
-          {/* Layer control panel — top-left */}
-          <div className="absolute left-4 top-4 z-10">
+          {/* HUD banner — top edge, above everything */}
+          <HudBanner />
+
+          {/* Layer control panel — top-left, below HUD */}
+          <div className="absolute left-4 top-[30px] z-10">
             <LayerPanel />
           </div>
 
-          {/* Satellite date scrubber — bottom-center, above auto-pan button */}
+          {/* Satellite date scrubber — bottom-center */}
           <div className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2">
             <SatelliteControls />
           </div>
+
+          {/* City quick-fly bar — bottom edge */}
+          <CityFlyBar />
 
           {/* Auto-pan toggle — bottom-left */}
           <TimelineScrubber />

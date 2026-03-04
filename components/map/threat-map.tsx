@@ -34,6 +34,7 @@ import { CountryConflictsModal } from "./country-conflicts-modal";
 import { SignInModal } from "@/components/auth/sign-in-modal";
 import { ImageGeolocatePanel } from "./image-geolocate-panel";
 import { hasReachedLimit, incrementCountryClicks } from "@/lib/usage-limits";
+import { SnowOverlay } from "./snow-overlay";
 
 const APP_MODE = process.env.NEXT_PUBLIC_APP_MODE || "self-hosted";
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -528,10 +529,14 @@ const satelliteNameLayer: LayerProps = {
 // ─── Visual mode CSS filters ──────────────────────────────────────────────────
 
 const VISUAL_FILTERS: Record<string, string> = {
-  normal: "",
-  crt: "contrast(1.2) brightness(0.88) saturate(0.85)",
+  normal:      "",
+  crt:         "contrast(1.2) brightness(0.88) saturate(0.85)",
   nightvision: "sepia(1) saturate(0.5) hue-rotate(60deg) brightness(1.5) contrast(1.25)",
-  flir: "sepia(1) saturate(4) hue-rotate(200deg) brightness(0.85) contrast(1.1)",
+  flir:        "sepia(1) saturate(4) hue-rotate(200deg) brightness(0.85) contrast(1.1)",
+  anime:       "saturate(2.8) contrast(1.5) brightness(1.05)",
+  noir:        "grayscale(1) contrast(1.8) brightness(1.0)",
+  snow:        "saturate(0.25) brightness(1.25) contrast(0.9) hue-rotate(185deg)",
+  ai:          "hue-rotate(210deg) saturate(1.6) brightness(0.92) contrast(1.25)",
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1592,10 +1597,12 @@ export function ThreatMap() {
         </div>
       )}
 
-      {/* CRT scanline overlay */}
-      {visualMode === "crt" && (
-        <div className="pointer-events-none absolute inset-0 z-10 crt-scanlines" />
-      )}
+      {/* Visual mode overlays */}
+      {visualMode === "crt"   && <div className="pointer-events-none absolute inset-0 z-10 crt-scanlines" />}
+      {visualMode === "anime" && <div className="pointer-events-none absolute inset-0 z-10 anime-vignette" />}
+      {visualMode === "noir"  && <div className="pointer-events-none absolute inset-0 z-10 noir-vignette" />}
+      {visualMode === "ai"    && <div className="pointer-events-none absolute inset-0 z-10 ai-scanlines" />}
+      {visualMode === "snow"  && <SnowOverlay />}
     </div>
   );
 }

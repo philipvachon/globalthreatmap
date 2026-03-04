@@ -9,6 +9,7 @@ import {
   Monitor, Tv2, Eye, Moon,
   Radar, TriangleAlert, Orbit,
   Map, Type, Box, Globe, Sun, Mountain,
+  Sparkles, Film, Snowflake, Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -57,10 +58,14 @@ function SectionLabel({ label }: { label: string }) {
 }
 
 const VISUAL_MODES: { id: VisualMode; label: string; icon: React.ReactNode }[] = [
-  { id: "normal",      label: "STD",  icon: <Monitor className="h-3 w-3" /> },
-  { id: "crt",         label: "CRT",  icon: <Tv2     className="h-3 w-3" /> },
-  { id: "nightvision", label: "NV",   icon: <Moon    className="h-3 w-3" /> },
-  { id: "flir",        label: "FLIR", icon: <Eye     className="h-3 w-3" /> },
+  { id: "normal",      label: "STD",   icon: <Monitor    className="h-3 w-3" /> },
+  { id: "crt",         label: "CRT",   icon: <Tv2        className="h-3 w-3" /> },
+  { id: "nightvision", label: "NV",    icon: <Moon       className="h-3 w-3" /> },
+  { id: "flir",        label: "FLIR",  icon: <Eye        className="h-3 w-3" /> },
+  { id: "anime",       label: "ANIME", icon: <Sparkles   className="h-3 w-3" /> },
+  { id: "noir",        label: "NOIR",  icon: <Film       className="h-3 w-3" /> },
+  { id: "snow",        label: "SNOW",  icon: <Snowflake  className="h-3 w-3" /> },
+  { id: "ai",          label: "AI",    icon: <Bot        className="h-3 w-3" /> },
 ];
 
 export function LayerPanel() {

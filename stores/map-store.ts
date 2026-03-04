@@ -79,7 +79,7 @@ export interface SatellitePosition {
   tle2: string;
 }
 
-export type VisualMode = "normal" | "crt" | "flir" | "nightvision";
+export type VisualMode = "normal" | "crt" | "flir" | "nightvision" | "anime" | "noir" | "snow" | "ai";
 
 function getYesterday(): string {
   const d = new Date();

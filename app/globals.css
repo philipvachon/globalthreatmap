@@ -338,3 +338,58 @@ body {
   background: radial-gradient(ellipse at center, transparent 55%, rgba(30, 15, 0, 0.5) 100%);
   z-index: 5;
 }
+
+/* Anime — pink/magenta edge vignette */
+.anime-vignette {
+  background: radial-gradient(ellipse at center, transparent 62%, rgba(255, 60, 140, 0.18) 100%);
+}
+.visual-mode-anime::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 65%, rgba(180, 0, 100, 0.12) 100%);
+  z-index: 5;
+}
+
+/* Noir — deep black vignette */
+.noir-vignette {
+  background: radial-gradient(ellipse at center, transparent 52%, rgba(0, 0, 0, 0.65) 100%);
+}
+.visual-mode-noir::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.5) 100%);
+  z-index: 5;
+}
+
+/* Snow — icy blue edge vignette */
+.visual-mode-snow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(180, 210, 255, 0.25) 100%);
+  z-index: 5;
+}
+
+/* AI — deep blue scan-line overlay + vignette */
+.ai-scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 4px,
+    rgba(0, 120, 255, 0.04) 4px,
+    rgba(0, 120, 255, 0.04) 5px
+  );
+}
+.visual-mode-ai::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 20, 80, 0.45) 100%);
+  z-index: 5;
+}
