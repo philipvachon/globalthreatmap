@@ -23,6 +23,7 @@ import { useMaritime } from "@/hooks/use-maritime";
 import { useWeather } from "@/hooks/use-weather";
 import { useAlerts } from "@/hooks/use-alerts";
 import { useSatellites } from "@/hooks/use-satellites";
+import { useNews } from "@/hooks/use-news";
 import { useGoogle3DTiles } from "@/hooks/use-google-3d-tiles";
 import { useGhostMaps } from "@/hooks/use-ghostmaps";
 import { twoline2satrec, propagate, gstime, eciToGeodetic, degreesLat, degreesLong } from "satellite.js";
@@ -205,9 +206,34 @@ const aircraftLayer: LayerProps = {
     "text-ignore-placement": true,
   },
   paint: {
-    "text-color": "#38bdf8",
+    "text-color": [
+      "match", ["get", "aircraftType"],
+      "military",   "#22c55e",
+      "cargo",      "#f97316",
+      "commercial", "#38bdf8",
+      "private",    "#eab308",
+      "#94a3b8", // unknown
+    ],
     "text-halo-color": "#0c1a2e",
     "text-halo-width": 1.5,
+  },
+};
+
+const aircraftTrailLayer: LayerProps = {
+  id: "aircraft-trails",
+  type: "line",
+  paint: {
+    "line-color": [
+      "match", ["get", "aircraftType"],
+      "military",   "#22c55e",
+      "cargo",      "#f97316",
+      "commercial", "#38bdf8",
+      "private",    "#eab308",
+      "#94a3b8",
+    ],
+    "line-width": 1,
+    "line-opacity": 0.4,
+    "line-dasharray": [2, 2],
   },
 };
 
@@ -342,11 +368,24 @@ const cameraLabelLayer: LayerProps = {
 };
 
 // Maritime vessels — amber ship symbol, rotated by heading
+// Vessel type → emoji icon
+function vesselEmoji(type: string): string {
+  const t = type.toLowerCase();
+  if (t.includes("cargo"))     return "🚢";
+  if (t.includes("tanker"))    return "🛢";
+  if (t.includes("passenger")) return "🛳";
+  if (t.includes("military"))  return "⚓";
+  if (t.includes("fishing"))   return "🎣";
+  if (t.includes("tug"))       return "⛵";
+  if (t.includes("sailing"))   return "⛵";
+  return "⛴";
+}
+
 const vesselLayer: LayerProps = {
   id: "vessel-points",
   type: "symbol",
   layout: {
-    "text-field": "⛴",
+    "text-field": ["get", "icon"],
     "text-size": 14,
     "text-rotate": ["get", "heading"],
     "text-rotation-alignment": "map",
@@ -354,8 +393,16 @@ const vesselLayer: LayerProps = {
     "text-ignore-placement": true,
   },
   paint: {
-    "text-color": "#f59e0b",
-    "text-halo-color": "#1c0f00",
+    "text-color": [
+      "match", ["get", "vesselClass"],
+      "cargo",     "#f97316",
+      "tanker",    "#ef4444",
+      "passenger", "#a78bfa",
+      "military",  "#22c55e",
+      "fishing",   "#34d399",
+      "#f59e0b", // default
+    ],
+    "text-halo-color": "#0c1a2e",
     "text-halo-width": 1.5,
   },
 };
@@ -528,6 +575,26 @@ const satelliteNameLayer: LayerProps = {
   },
 };
 
+// ─── GDELT Live News layer ────────────────────────────────────────────────────
+
+const newsCircleLayer: LayerProps = {
+  id: "news-circles",
+  type: "circle",
+  paint: {
+    "circle-color": [
+      "interpolate", ["linear"], ["get", "tone"],
+      -10, "#ef4444",  // negative / hostile
+      0,   "#f59e0b",  // neutral
+      10,  "#22c55e",  // positive
+    ],
+    "circle-radius": ["interpolate", ["linear"], ["get", "count"], 1, 5, 10, 9, 50, 13],
+    "circle-opacity": 0.75,
+    "circle-stroke-width": 1,
+    "circle-stroke-color": "#ffffff",
+    "circle-stroke-opacity": 0.3,
+  },
+};
+
 // ─── Visual mode CSS filters ──────────────────────────────────────────────────
 
 const VISUAL_FILTERS: Record<string, string> = {
@@ -583,17 +650,27 @@ export function ThreatMap() {
     showSatelliteBase, showMapLabels, showGoogle3DTiles,
     showGhostMaps, hiddenGhostMapSources,
     showHillshade, showTerrain,
+    showNewsLayer, newsItems,
   } = useMapStore();
 
   const { filteredEvents, selectedEvent, selectEvent } = useEventsStore();
   const { isAuthenticated, initialized } = useAuthStore();
 
-  // Timeline replay events
+  // Timeline replay events + bbox draw
   const {
     events: timelineEvents,
     selectedEvent: selectedTimelineEvent,
     selectEvent: selectTimelineEvent,
+    isDrawingBbox, setDrawingBbox,
+    bbox, setBbox,
   } = useTimelineStore();
+
+  // Bbox draw state
+  const [drawStart, setDrawStart] = useState<{ x: number; y: number; lng: number; lat: number } | null>(null);
+  const [drawCurrent, setDrawCurrent] = useState<{ x: number; y: number } | null>(null);
+
+  // Aircraft position trails — keep last 5 positions per ICAO24
+  const [aircraftTrails, setAircraftTrails] = useState<Record<string, [number, number][]>>({});
 
   // Activate data hooks
   useAircraft();
@@ -604,6 +681,7 @@ export function ThreatMap() {
   useAlerts();
   useSatellites();
   useGoogle3DTiles(mapRef, viewport.zoom, showGoogle3DTiles);
+  useNews();
   const { geojson: ghostMapsGeoJSON, loading: ghostMapsLoading } = useGhostMaps();
 
   // Resize map canvas after sidebar expand/collapse animation finishes (300ms)
@@ -752,6 +830,75 @@ export function ThreatMap() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showSatellites]);
 
+  // Disable/enable map interactions during bbox draw
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    if (isDrawingBbox) {
+      map.dragPan.disable();
+      map.scrollZoom.disable();
+      map.boxZoom.disable();
+      map.doubleClickZoom.disable();
+    } else {
+      map.dragPan.enable();
+      map.scrollZoom.enable();
+      map.boxZoom.enable();
+      map.doubleClickZoom.enable();
+      setDrawStart(null);
+      setDrawCurrent(null);
+    }
+  }, [isDrawingBbox]);
+
+  // Update aircraft trails on each position refresh
+  useEffect(() => {
+    if (!showAircraft || aircraft.length === 0) return;
+    setAircraftTrails((prev) => {
+      const next = { ...prev };
+      for (const a of aircraft) {
+        const trail = prev[a.icao24] ?? [];
+        const last = trail[trail.length - 1];
+        if (last && last[0] === a.longitude && last[1] === a.latitude) continue;
+        next[a.icao24] = [...trail, [a.longitude, a.latitude]].slice(-5) as [number, number][];
+      }
+      return next;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aircraft]);
+
+  const handleDrawMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDrawingBbox || !mapRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const lngLat = mapRef.current.unproject([x, y]);
+    setDrawStart({ x, y, lng: lngLat.lng, lat: lngLat.lat });
+    setDrawCurrent({ x, y });
+    e.preventDefault();
+  }, [isDrawingBbox]);
+
+  const handleDrawMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDrawingBbox || !drawStart) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDrawCurrent({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  }, [isDrawingBbox, drawStart]);
+
+  const handleDrawMouseUp = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDrawingBbox || !drawStart || !mapRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const end = mapRef.current.unproject([x, y]);
+    setBbox({
+      north: Math.max(drawStart.lat, end.lat),
+      south: Math.min(drawStart.lat, end.lat),
+      east:  Math.max(drawStart.lng, end.lng),
+      west:  Math.min(drawStart.lng, end.lng),
+    });
+    setDrawStart(null);
+    setDrawCurrent(null);
+    setDrawingBbox(false);
+  }, [isDrawingBbox, drawStart, setBbox, setDrawingBbox]);
+
   function clearPopups() {
     selectEvent(null);
     setSelEntity(null);
@@ -794,19 +941,36 @@ export function ThreatMap() {
     })),
   }), [militaryBases]);
 
+  const visibleAircraft = useMemo(() =>
+    aircraft.filter((a) => {
+      if (hiddenAircraftTypes.length === 0) return true;
+      return !hiddenAircraftTypes.includes(classifyAircraft(a.callsign));
+    }),
+  [aircraft, hiddenAircraftTypes]);
+
   const aircraftGeoJSON = useMemo(() => ({
     type: "FeatureCollection" as const,
-    features: aircraft
-      .filter((a) => {
-        if (hiddenAircraftTypes.length === 0) return true;
-        return !hiddenAircraftTypes.includes(classifyAircraft(a.callsign));
+    features: visibleAircraft.map((a) => ({
+      type: "Feature" as const,
+      properties: { icao24: a.icao24, callsign: a.callsign || a.icao24, originCountry: a.originCountry, altitude: a.altitude, velocity: a.velocity, heading: a.heading, aircraftType: classifyAircraft(a.callsign) },
+      geometry: { type: "Point" as const, coordinates: [a.longitude, a.latitude] },
+    })),
+  }), [visibleAircraft]);
+
+  const aircraftTrailGeoJSON = useMemo((): GeoJSON.FeatureCollection => ({
+    type: "FeatureCollection",
+    features: visibleAircraft
+      .map((a) => {
+        const trail = aircraftTrails[a.icao24];
+        if (!trail || trail.length < 2) return null;
+        return {
+          type: "Feature" as const,
+          properties: { aircraftType: classifyAircraft(a.callsign) },
+          geometry: { type: "LineString" as const, coordinates: trail },
+        };
       })
-      .map((a) => ({
-        type: "Feature" as const,
-        properties: { icao24: a.icao24, callsign: a.callsign || a.icao24, originCountry: a.originCountry, altitude: a.altitude, velocity: a.velocity, heading: a.heading },
-        geometry: { type: "Point" as const, coordinates: [a.longitude, a.latitude] },
-      })),
-  }), [aircraft, hiddenAircraftTypes]);
+      .filter(Boolean) as GeoJSON.Feature[],
+  }), [visibleAircraft, aircraftTrails]);
 
   const seismicGeoJSON = useMemo(() => ({
     type: "FeatureCollection" as const,
@@ -831,11 +995,20 @@ export function ThreatMap() {
 
   const vesselsGeoJSON = useMemo(() => ({
     type: "FeatureCollection" as const,
-    features: vessels.map((v) => ({
-      type: "Feature" as const,
-      properties: { mmsi: v.mmsi, name: v.name, type: v.type, speed: v.speed, heading: v.heading, destination: v.destination },
-      geometry: { type: "Point" as const, coordinates: [v.longitude, v.latitude] },
-    })),
+    features: vessels.map((v) => {
+      const t = v.type.toLowerCase();
+      const vesselClass =
+        t.includes("cargo")     ? "cargo"     :
+        t.includes("tanker")    ? "tanker"    :
+        t.includes("passenger") ? "passenger" :
+        t.includes("military")  ? "military"  :
+        t.includes("fishing")   ? "fishing"   : "other";
+      return {
+        type: "Feature" as const,
+        properties: { mmsi: v.mmsi, name: v.name, type: v.type, speed: v.speed, heading: v.heading, destination: v.destination, vesselClass, icon: vesselEmoji(v.type) },
+        geometry: { type: "Point" as const, coordinates: [v.longitude, v.latitude] },
+      };
+    }),
   }), [vessels]);
 
   // Alerts GeoJSON — build FeatureCollection from stored features
@@ -843,6 +1016,16 @@ export function ThreatMap() {
     type: "FeatureCollection" as const,
     features: alertsFeatures,
   }), [alertsFeatures]);
+
+  // GDELT live news GeoJSON
+  const newsGeoJSON = useMemo((): GeoJSON.FeatureCollection => ({
+    type: "FeatureCollection",
+    features: newsItems.map((n, i) => ({
+      type: "Feature" as const,
+      properties: { id: `news-${i}`, name: n.name, count: n.count, tone: n.avgTone ?? 0, url: n.url, domain: n.domain },
+      geometry: { type: "Point" as const, coordinates: [n.lon, n.lat] },
+    })),
+  }), [newsItems]);
 
   // Selected satellite ground track — 90-min forward track at 2-min intervals
   const satTrackGeoJSON = useMemo(() => {
@@ -1047,7 +1230,27 @@ export function ThreatMap() {
     : "mapbox://styles/mapbox/dark-v11";
 
   return (
-    <div className={`relative h-full w-full visual-mode-${visualMode}`}>
+    <div
+      className={`relative h-full w-full visual-mode-${visualMode}`}
+      onMouseDown={handleDrawMouseDown}
+      onMouseMove={handleDrawMouseMove}
+      onMouseUp={handleDrawMouseUp}
+      style={{ cursor: isDrawingBbox ? "crosshair" : undefined }}
+    >
+      {/* Draw rectangle preview */}
+      {isDrawingBbox && drawStart && drawCurrent && (
+        <div
+          className="pointer-events-none absolute z-30 border-2 border-dashed border-amber-400"
+          style={{
+            left:   Math.min(drawStart.x, drawCurrent.x),
+            top:    Math.min(drawStart.y, drawCurrent.y),
+            width:  Math.abs(drawCurrent.x - drawStart.x),
+            height: Math.abs(drawCurrent.y - drawStart.y),
+            backgroundColor: "rgba(245,158,11,0.08)",
+          }}
+        />
+      )}
+
       <div className="h-full w-full" style={{ filter: cssFilter }}>
         <Map
           ref={mapRef}
@@ -1128,6 +1331,13 @@ export function ThreatMap() {
             <Source id="nws-alerts" type="geojson" data={alertsGeoJSON}>
               <Layer {...alertsFillLayer} />
               <Layer {...alertsLineLayer} />
+            </Source>
+          )}
+
+          {/* GDELT live news hotspots */}
+          {showNewsLayer && newsGeoJSON.features.length > 0 && (
+            <Source id="gdelt-news" type="geojson" data={newsGeoJSON} cluster clusterMaxZoom={8} clusterRadius={40}>
+              <Layer {...newsCircleLayer} />
             </Source>
           )}
 
@@ -1270,6 +1480,13 @@ export function ThreatMap() {
             <Source id="military-bases" type="geojson" data={basesGeoJSON}>
               <Layer {...militaryBaseCircleLayer} />
               <Layer {...militaryBaseLabelLayer} />
+            </Source>
+          )}
+
+          {/* ADS-B Aircraft trails */}
+          {showAircraft && aircraftTrailGeoJSON.features.length > 0 && (
+            <Source id="aircraft-trails" type="geojson" data={aircraftTrailGeoJSON}>
+              <Layer {...aircraftTrailLayer} />
             </Source>
           )}
 
@@ -1590,6 +1807,23 @@ export function ThreatMap() {
                 </div>
               </Popup>
             </>
+          )}
+
+          {/* Timeline bbox region — amber dashed outline */}
+          {bbox && (
+            <Source id="timeline-bbox" type="geojson" data={{
+              type: "FeatureCollection",
+              features: [{
+                type: "Feature", properties: {},
+                geometry: {
+                  type: "Polygon",
+                  coordinates: [[[bbox.west, bbox.north], [bbox.east, bbox.north], [bbox.east, bbox.south], [bbox.west, bbox.south], [bbox.west, bbox.north]]],
+                },
+              }],
+            }}>
+              <Layer id="timeline-bbox-fill" type="fill" paint={{ "fill-color": "#f59e0b", "fill-opacity": 0.08 }} />
+              <Layer id="timeline-bbox-line" type="line" paint={{ "line-color": "#f59e0b", "line-width": 1.5, "line-dasharray": [4, 2], "line-opacity": 0.85 }} />
+            </Source>
           )}
 
           {/* ─── Timeline event markers ──────────────────────────────── */}

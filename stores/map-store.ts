@@ -81,6 +81,16 @@ export interface SatellitePosition {
 
 export type VisualMode = "normal" | "crt" | "flir" | "nightvision" | "anime" | "noir" | "snow" | "ai";
 
+export interface NewsItem {
+  lat: number;
+  lon: number;
+  name: string;
+  count: number;
+  url?: string;
+  domain?: string;
+  avgTone?: number;
+}
+
 function getYesterday(): string {
   const d = new Date();
   d.setDate(d.getDate() - 1);
@@ -144,6 +154,9 @@ interface MapState {
   hiddenGhostMapSources: string[]; // [] = all visible; ["cip"] / ["border"] = hide that source
   showHillshade: boolean;          // ArcGIS World Hillshade raster overlay
   showTerrain: boolean;            // Mapbox 3D terrain exaggeration
+  showNewsLayer: boolean;          // GDELT live news hotspots
+  newsItems: NewsItem[];
+  newsLoading: boolean;
 
   setViewport: (viewport: Partial<MapViewport>) => void;
   flyTo: (longitude: number, latitude: number, zoom?: number) => void;
@@ -205,6 +218,9 @@ interface MapState {
   toggleGhostMapSource: (source: string) => void;
   toggleHillshade: () => void;
   toggleTerrain: () => void;
+  toggleNewsLayer: () => void;
+  setNewsItems: (items: NewsItem[]) => void;
+  setNewsLoading: (loading: boolean) => void;
 }
 
 const DEFAULT_VIEWPORT: MapViewport = {
@@ -271,6 +287,9 @@ export const useMapStore = create<MapState>((set) => ({
   hiddenGhostMapSources: [],
   showHillshade: false,
   showTerrain: false,
+  showNewsLayer: false,
+  newsItems: [],
+  newsLoading: false,
 
   setViewport: (viewport) =>
     set((state) => ({ viewport: { ...state.viewport, ...viewport } })),
@@ -369,6 +388,9 @@ export const useMapStore = create<MapState>((set) => ({
         ? s.hiddenGhostMapSources.filter((x) => x !== source)
         : [...s.hiddenGhostMapSources, source],
     })),
-  toggleHillshade: () => set((s) => ({ showHillshade: !s.showHillshade })),
-  toggleTerrain:   () => set((s) => ({ showTerrain:   !s.showTerrain })),
+  toggleHillshade:  () => set((s) => ({ showHillshade:  !s.showHillshade })),
+  toggleTerrain:    () => set((s) => ({ showTerrain:    !s.showTerrain })),
+  toggleNewsLayer:  () => set((s) => ({ showNewsLayer:  !s.showNewsLayer })),
+  setNewsItems:     (newsItems)    => set({ newsItems }),
+  setNewsLoading:   (newsLoading)  => set({ newsLoading }),
 }));

@@ -11,7 +11,7 @@ import {
   Radar, TriangleAlert, Orbit,
   Map, Type, Box, Globe, Sun, Mountain,
   Sparkles, Film, Snowflake, Bot,
-  Clock,
+  Clock, Newspaper,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -99,6 +99,7 @@ export function LayerPanel() {
     hiddenGhostMapSources, toggleGhostMapSource,
     showHillshade,     toggleHillshade,
     showTerrain,       toggleTerrain,
+    showNewsLayer,     toggleNewsLayer,  newsLoading,
     showCaltransCameras, toggleCaltransCameras,
     showWSDOTCameras,    toggleWSDOTCameras,
     showNDBCBuoys,       toggleNDBCBuoys,
@@ -383,6 +384,7 @@ export function LayerPanel() {
           <ToggleRow label="Fire/VIIRS"   active={showFire}    onToggle={toggleFire}    icon={<Zap            className="h-3.5 w-3.5" />} iconColor="text-red-400"    badge="NASA" />
           <ToggleRow label="Weather Radar" active={showWeather} onToggle={toggleWeather} icon={<Radar          className="h-3.5 w-3.5" />} iconColor="text-cyan-400" />
           <ToggleRow label="NWS Alerts"   active={showAlerts}  onToggle={toggleAlerts}  icon={<TriangleAlert  className="h-3.5 w-3.5" />} iconColor="text-amber-400" loading={alertsLoading} badge="US" />
+          <ToggleRow label="Live News"    active={showNewsLayer} onToggle={toggleNewsLayer} icon={<Newspaper className="h-3.5 w-3.5" />} iconColor="text-rose-400" loading={newsLoading} badge="GDELT" />
         </div>
 
         {/* ── View Mode ────────────────────────────── */}
