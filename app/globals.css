@@ -179,8 +179,7 @@ body {
   box-shadow: var(--shadow-lg) !important;
   border: 1px solid var(--color-border) !important;
   padding: 0 !important;
-  overflow: hidden !important;
-  max-width: 320px !important;
+  max-width: none !important;
 }
 
 .mapboxgl-popup-close-button {
@@ -267,4 +266,130 @@ body {
 
 .threat-critical {
   animation: pulse-threat 2s ease-in-out infinite;
+}
+
+/* ── Satellite date-scrubber range input ─────────────────────────────────── */
+
+.satellite-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  background: var(--color-muted);
+  border-radius: 9999px;
+  outline: none;
+  cursor: pointer;
+}
+
+.satellite-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #a78bfa;
+  border: 2px solid var(--color-card);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.satellite-slider::-webkit-slider-thumb:hover {
+  background: #c4b5fd;
+}
+
+.satellite-slider::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #a78bfa;
+  border: 2px solid var(--color-card);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+/* ── Visual Mode Shaders ─────────────────────────────────────────────────── */
+
+/* CRT phosphor scanline overlay */
+.crt-scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.18) 2px,
+    rgba(0, 0, 0, 0.18) 4px
+  );
+}
+
+/* Faint green vignette for Night Vision */
+.visual-mode-nightvision::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 40, 0, 0.55) 100%);
+  z-index: 5;
+}
+
+/* Subtle amber vignette for FLIR */
+.visual-mode-flir::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(30, 15, 0, 0.5) 100%);
+  z-index: 5;
+}
+
+/* Anime — pink/magenta edge vignette */
+.anime-vignette {
+  background: radial-gradient(ellipse at center, transparent 62%, rgba(255, 60, 140, 0.18) 100%);
+}
+.visual-mode-anime::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 65%, rgba(180, 0, 100, 0.12) 100%);
+  z-index: 5;
+}
+
+/* Noir — deep black vignette */
+.noir-vignette {
+  background: radial-gradient(ellipse at center, transparent 52%, rgba(0, 0, 0, 0.65) 100%);
+}
+.visual-mode-noir::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.5) 100%);
+  z-index: 5;
+}
+
+/* Snow — icy blue edge vignette */
+.visual-mode-snow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(180, 210, 255, 0.25) 100%);
+  z-index: 5;
+}
+
+/* AI — deep blue scan-line overlay + vignette */
+.ai-scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 4px,
+    rgba(0, 120, 255, 0.04) 4px,
+    rgba(0, 120, 255, 0.04) 5px
+  );
+}
+.visual-mode-ai::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 20, 80, 0.45) 100%);
+  z-index: 5;
 }

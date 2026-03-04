@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { MapViewport, GeoLocation } from "@/types";
+import type { SatelliteSource } from "@/components/map/satellite-controls";
 
 interface EntityLocationMarker extends GeoLocation {
   entityName: string;
@@ -13,18 +14,150 @@ export interface MilitaryBaseMarker {
   type: "usa" | "nato";
 }
 
+export interface AircraftState {
+  icao24: string;
+  callsign: string;
+  originCountry: string;
+  longitude: number;
+  latitude: number;
+  altitude: number;
+  velocity: number;
+  heading: number;
+  onGround: boolean;
+}
+
+export interface EarthquakeEvent {
+  id: string;
+  magnitude: number;
+  place: string;
+  time: number;
+  longitude: number;
+  latitude: number;
+  depth: number;
+}
+
+export interface CameraMarker {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  imageUrl: string;
+  source: "nyc" | "faa" | "caltrans" | "wsdot" | "ndbc" | "nps" | "flock";
+  isOnline: boolean;
+}
+
+export interface VesselMarker {
+  mmsi: string;
+  name: string;
+  type: string;
+  latitude: number;
+  longitude: number;
+  heading: number;
+  speed: number;
+  destination?: string;
+  flag?: string;
+}
+
+export interface GeolocatePin {
+  latitude: number;
+  longitude: number;
+  confidence: number;
+  method: "exif" | "geospy" | "ai-vision";
+  placeName?: string;
+  reasoning?: string;
+}
+
+export interface SatellitePosition {
+  noradId: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  altKm: number;
+  category: string;
+  inclination: number;
+  tle1: string;
+  tle2: string;
+}
+
+export type VisualMode = "normal" | "crt" | "flir" | "nightvision" | "anime" | "noir" | "snow" | "ai";
+
+export interface NewsItem {
+  lat: number;
+  lon: number;
+  name: string;
+  count: number;
+  url?: string;
+  domain?: string;
+  avgTone?: number;
+}
+
+function getYesterday(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().split("T")[0];
+}
+
 interface MapState {
   viewport: MapViewport;
   showHeatmap: boolean;
   showClusters: boolean;
   showWatchboxes: boolean;
   showMilitaryBases: boolean;
+  showAircraft: boolean;
+  showSeismic: boolean;
+  showTraffic: boolean;
+  showNYCCameras: boolean;
+  showFAACameras: boolean;
+  showCaltransCameras: boolean;
+  showWSDOTCameras: boolean;
+  showNDBCBuoys: boolean;
+  showNPSCameras: boolean;
+  showFlockCameras: boolean;
+  showMaritime: boolean;
+  showFire: boolean;
+  showWeather: boolean;
+  weatherPath: string | null;   // RainViewer tile path prefix, e.g. "/v2/radar/1234567890"
+  weatherHost: string;          // RainViewer tile host
+  showAlerts: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  alertsFeatures: any[];        // raw NWS GeoJSON feature objects
+  alertsLoading: boolean;
+  showSatellite: boolean;
+  satelliteDate: string;
+  satelliteSource: SatelliteSource;
+  satelliteOpacity: number;
+  visualMode: VisualMode;
   isDrawingWatchbox: boolean;
   activeWatchboxId: string | null;
   isAutoPlaying: boolean;
   entityLocations: EntityLocationMarker[];
   militaryBases: MilitaryBaseMarker[];
   militaryBasesLoading: boolean;
+  aircraft: AircraftState[];
+  aircraftLoading: boolean;
+  hiddenAircraftTypes: string[];
+  earthquakes: EarthquakeEvent[];
+  seismicLoading: boolean;
+  cameras: CameraMarker[];
+  camerasLoading: boolean;
+  vessels: VesselMarker[];
+  maritimeConnected: boolean;
+  showSatellites: boolean;
+  satellitePositions: SatellitePosition[];
+  satellitesLoading: boolean;
+  hiddenSatCategories: string[];
+  geolocatePin: GeolocatePin | null;
+  sidebarCollapsed: boolean;
+  showSatelliteBase: boolean;      // enables Mapbox satellite base map at zoom ≥ 10
+  showMapLabels: boolean;          // shows POI/street labels on satellite base map
+  showGoogle3DTiles: boolean;      // enables Google Photorealistic 3D Tiles at zoom ≥ 15
+  showGhostMaps: boolean;          // S2 Underground GhostMaps CIP + Border Crisis KMZ overlay
+  hiddenGhostMapSources: string[]; // [] = all visible; ["cip"] / ["border"] = hide that source
+  showHillshade: boolean;          // ArcGIS World Hillshade raster overlay
+  showTerrain: boolean;            // Mapbox 3D terrain exaggeration
+  showNewsLayer: boolean;          // GDELT live news hotspots
+  newsItems: NewsItem[];
+  newsLoading: boolean;
 
   setViewport: (viewport: Partial<MapViewport>) => void;
   flyTo: (longitude: number, latitude: number, zoom?: number) => void;
@@ -32,6 +165,29 @@ interface MapState {
   toggleClusters: () => void;
   toggleWatchboxes: () => void;
   toggleMilitaryBases: () => void;
+  toggleAircraft: () => void;
+  toggleSeismic: () => void;
+  toggleTraffic: () => void;
+  toggleNYCCameras: () => void;
+  toggleFAACameras: () => void;
+  toggleCaltransCameras: () => void;
+  toggleWSDOTCameras: () => void;
+  toggleNDBCBuoys: () => void;
+  toggleNPSCameras: () => void;
+  toggleFlockCameras: () => void;
+  toggleMaritime: () => void;
+  toggleFire: () => void;
+  toggleWeather: () => void;
+  toggleAlerts: () => void;
+  setWeatherData: (path: string, host: string) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  setAlertsFeatures: (features: any[]) => void;
+  setAlertsLoading: (loading: boolean) => void;
+  toggleSatellite: () => void;
+  setSatelliteDate: (date: string) => void;
+  setSatelliteSource: (source: SatelliteSource) => void;
+  setSatelliteOpacity: (opacity: number) => void;
+  setVisualMode: (mode: VisualMode) => void;
   startDrawingWatchbox: () => void;
   stopDrawingWatchbox: () => void;
   setActiveWatchbox: (id: string | null) => void;
@@ -41,6 +197,32 @@ interface MapState {
   clearEntityLocations: () => void;
   setMilitaryBases: (bases: MilitaryBaseMarker[]) => void;
   setMilitaryBasesLoading: (loading: boolean) => void;
+  setAircraft: (aircraft: AircraftState[]) => void;
+  setAircraftLoading: (loading: boolean) => void;
+  toggleAircraftType: (type: string) => void;
+  setEarthquakes: (earthquakes: EarthquakeEvent[]) => void;
+  setSeismicLoading: (loading: boolean) => void;
+  setCameras: (cameras: CameraMarker[]) => void;
+  setCamerasLoading: (loading: boolean) => void;
+  upsertVessel: (vessel: VesselMarker) => void;
+  clearVessels: () => void;
+  setMaritimeConnected: (connected: boolean) => void;
+  toggleSatellites: () => void;
+  setSatellitePositions: (positions: SatellitePosition[]) => void;
+  setSatellitesLoading: (loading: boolean) => void;
+  setGeolocatePin: (pin: GeolocatePin | null) => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  toggleSatCategory: (category: string) => void;
+  toggleSatelliteBase: () => void;
+  toggleMapLabels: () => void;
+  toggleGoogle3DTiles: () => void;
+  toggleGhostMaps: () => void;
+  toggleGhostMapSource: (source: string) => void;
+  toggleHillshade: () => void;
+  toggleTerrain: () => void;
+  toggleNewsLayer: () => void;
+  setNewsItems: (items: NewsItem[]) => void;
+  setNewsLoading: (loading: boolean) => void;
 }
 
 const DEFAULT_VIEWPORT: MapViewport = {
@@ -57,69 +239,162 @@ export const useMapStore = create<MapState>((set) => ({
   showClusters: true,
   showWatchboxes: true,
   showMilitaryBases: true,
+  showAircraft: false,
+  showSeismic: false,
+  showTraffic: false,
+  showNYCCameras: false,
+  showFAACameras: false,
+  showCaltransCameras: false,
+  showWSDOTCameras: false,
+  showNDBCBuoys: false,
+  showNPSCameras: false,
+  showFlockCameras: false,
+  showMaritime: false,
+  showFire: false,
+  showWeather: false,
+  weatherPath: null,
+  weatherHost: "https://tilecache.rainviewer.com",
+  showAlerts: false,
+  alertsFeatures: [],
+  alertsLoading: false,
+  showSatellite: false,
+  satelliteDate: getYesterday(),
+  satelliteSource: "modis-terra",
+  satelliteOpacity: 0.85,
+  visualMode: "normal",
   isDrawingWatchbox: false,
   activeWatchboxId: null,
   isAutoPlaying: false,
   entityLocations: [],
   militaryBases: [],
   militaryBasesLoading: false,
+  aircraft: [],
+  aircraftLoading: false,
+  hiddenAircraftTypes: [],
+  earthquakes: [],
+  seismicLoading: false,
+  cameras: [],
+  camerasLoading: false,
+  vessels: [],
+  maritimeConnected: false,
+  showSatellites: false,
+  satellitePositions: [],
+  satellitesLoading: false,
+  hiddenSatCategories: [],
+  geolocatePin: null,
+  sidebarCollapsed: false,
+  showSatelliteBase: true,
+  showMapLabels: true,
+  showGoogle3DTiles: true,
+  showGhostMaps: false,
+  hiddenGhostMapSources: [],
+  showHillshade: false,
+  showTerrain: false,
+  showNewsLayer: false,
+  newsItems: [],
+  newsLoading: false,
 
   setViewport: (viewport) =>
-    set((state) => ({
-      viewport: { ...state.viewport, ...viewport },
-    })),
+    set((state) => ({ viewport: { ...state.viewport, ...viewport } })),
 
   flyTo: (longitude, latitude, zoom = 8) =>
-    set((state) => ({
-      viewport: {
-        ...state.viewport,
-        longitude,
-        latitude,
-        zoom,
-      },
-    })),
+    set((state) => ({ viewport: { ...state.viewport, longitude, latitude, zoom } })),
 
-  toggleHeatmap: () =>
-    set((state) => ({
-      showHeatmap: !state.showHeatmap,
-    })),
+  toggleHeatmap:       () => set((s) => ({ showHeatmap:       !s.showHeatmap })),
+  toggleClusters:      () => set((s) => ({ showClusters:      !s.showClusters })),
+  toggleWatchboxes:    () => set((s) => ({ showWatchboxes:    !s.showWatchboxes })),
+  toggleMilitaryBases: () => set((s) => ({ showMilitaryBases: !s.showMilitaryBases })),
+  toggleAircraft:      () => set((s) => ({ showAircraft:      !s.showAircraft })),
+  toggleSeismic:       () => set((s) => ({ showSeismic:       !s.showSeismic })),
+  toggleTraffic:       () => set((s) => ({ showTraffic:       !s.showTraffic })),
+  toggleNYCCameras:      () => set((s) => ({ showNYCCameras:      !s.showNYCCameras })),
+  toggleFAACameras:      () => set((s) => ({ showFAACameras:      !s.showFAACameras })),
+  toggleCaltransCameras: () => set((s) => ({ showCaltransCameras: !s.showCaltransCameras })),
+  toggleWSDOTCameras:    () => set((s) => ({ showWSDOTCameras:    !s.showWSDOTCameras })),
+  toggleNDBCBuoys:       () => set((s) => ({ showNDBCBuoys:       !s.showNDBCBuoys })),
+  toggleNPSCameras:      () => set((s) => ({ showNPSCameras:      !s.showNPSCameras })),
+  toggleFlockCameras:    () => set((s) => ({ showFlockCameras:    !s.showFlockCameras })),
+  toggleMaritime:      () => set((s) => ({ showMaritime:      !s.showMaritime })),
+  toggleFire:          () => set((s) => ({ showFire:          !s.showFire })),
+  toggleWeather:       () => set((s) => ({ showWeather:       !s.showWeather })),
+  toggleAlerts:        () => set((s) => ({ showAlerts:        !s.showAlerts })),
+  setWeatherData:      (path, host) => set({ weatherPath: path, weatherHost: host }),
+  setAlertsFeatures:   (features) => set({ alertsFeatures: features }),
+  setAlertsLoading:    (loading)  => set({ alertsLoading: loading }),
+  toggleSatellite:     () => set((s) => ({ showSatellite:     !s.showSatellite })),
 
-  toggleClusters: () =>
-    set((state) => ({
-      showClusters: !state.showClusters,
-    })),
-
-  toggleWatchboxes: () =>
-    set((state) => ({
-      showWatchboxes: !state.showWatchboxes,
-    })),
-
-  toggleMilitaryBases: () =>
-    set((state) => ({
-      showMilitaryBases: !state.showMilitaryBases,
-    })),
+  setSatelliteDate:    (date)    => set({ satelliteDate:    date }),
+  setSatelliteSource:  (source)  => set({ satelliteSource:  source }),
+  setSatelliteOpacity: (opacity) => set({ satelliteOpacity: opacity }),
+  setVisualMode:       (mode)    => set({ visualMode:       mode }),
 
   startDrawingWatchbox: () => set({ isDrawingWatchbox: true }),
-
-  stopDrawingWatchbox: () => set({ isDrawingWatchbox: false }),
-
-  setActiveWatchbox: (id) => set({ activeWatchboxId: id }),
-
-  startAutoPlay: () => set({ isAutoPlaying: true }),
-
-  stopAutoPlay: () => set({ isAutoPlaying: false }),
+  stopDrawingWatchbox:  () => set({ isDrawingWatchbox: false }),
+  setActiveWatchbox:    (id) => set({ activeWatchboxId: id }),
+  startAutoPlay:        () => set({ isAutoPlaying: true }),
+  stopAutoPlay:         () => set({ isAutoPlaying: false }),
 
   setEntityLocations: (entityName, locations) =>
-    set({
-      entityLocations: locations.map((loc) => ({
-        ...loc,
-        entityName,
-      })),
-    }),
-
+    set({ entityLocations: locations.map((loc) => ({ ...loc, entityName })) }),
   clearEntityLocations: () => set({ entityLocations: [] }),
 
-  setMilitaryBases: (bases) => set({ militaryBases: bases }),
-
+  setMilitaryBases:        (bases)   => set({ militaryBases: bases }),
   setMilitaryBasesLoading: (loading) => set({ militaryBasesLoading: loading }),
+  setAircraft:             (aircraft) => set({ aircraft }),
+  setAircraftLoading:      (loading)  => set({ aircraftLoading: loading }),
+  toggleAircraftType: (type) =>
+    set((s) => ({
+      hiddenAircraftTypes: s.hiddenAircraftTypes.includes(type)
+        ? s.hiddenAircraftTypes.filter((t) => t !== type)
+        : [...s.hiddenAircraftTypes, type],
+    })),
+  setEarthquakes:          (earthquakes) => set({ earthquakes }),
+  setSeismicLoading:       (loading)     => set({ seismicLoading: loading }),
+  setCameras:              (cameras) => set({ cameras }),
+  setCamerasLoading:       (loading) => set({ camerasLoading: loading }),
+
+  upsertVessel: (vessel) =>
+    set((state) => {
+      const idx = state.vessels.findIndex((v) => v.mmsi === vessel.mmsi);
+      if (idx >= 0) {
+        const updated = [...state.vessels];
+        updated[idx] = vessel;
+        return { vessels: updated };
+      }
+      const next = state.vessels.length >= 2000
+        ? [...state.vessels.slice(-1999), vessel]
+        : [...state.vessels, vessel];
+      return { vessels: next };
+    }),
+
+  clearVessels:          () => set({ vessels: [] }),
+  setMaritimeConnected:  (connected) => set({ maritimeConnected: connected }),
+
+  toggleSatellites:       () => set((s) => ({ showSatellites: !s.showSatellites })),
+  setSatellitePositions:  (positions) => set({ satellitePositions: positions }),
+  setSatellitesLoading:   (loading)   => set({ satellitesLoading: loading }),
+  setGeolocatePin:        (pin)       => set({ geolocatePin: pin }),
+  setSidebarCollapsed:    (collapsed) => set({ sidebarCollapsed: collapsed }),
+  toggleSatCategory: (category) =>
+    set((s) => ({
+      hiddenSatCategories: s.hiddenSatCategories.includes(category)
+        ? s.hiddenSatCategories.filter((c) => c !== category)
+        : [...s.hiddenSatCategories, category],
+    })),
+
+  toggleSatelliteBase:  () => set((s) => ({ showSatelliteBase:  !s.showSatelliteBase })),
+  toggleMapLabels:      () => set((s) => ({ showMapLabels:      !s.showMapLabels })),
+  toggleGoogle3DTiles:  () => set((s) => ({ showGoogle3DTiles:  !s.showGoogle3DTiles })),
+  toggleGhostMaps:      () => set((s) => ({ showGhostMaps:      !s.showGhostMaps })),
+  toggleGhostMapSource: (source) =>
+    set((s) => ({
+      hiddenGhostMapSources: s.hiddenGhostMapSources.includes(source)
+        ? s.hiddenGhostMapSources.filter((x) => x !== source)
+        : [...s.hiddenGhostMapSources, source],
+    })),
+  toggleHillshade:  () => set((s) => ({ showHillshade:  !s.showHillshade })),
+  toggleTerrain:    () => set((s) => ({ showTerrain:    !s.showTerrain })),
+  toggleNewsLayer:  () => set((s) => ({ showNewsLayer:  !s.showNewsLayer })),
+  setNewsItems:     (newsItems)    => set({ newsItems }),
+  setNewsLoading:   (newsLoading)  => set({ newsLoading }),
 }));

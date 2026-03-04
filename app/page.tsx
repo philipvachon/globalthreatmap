@@ -6,7 +6,12 @@ import { Header } from "@/components/header";
 import { Sidebar } from "@/components/sidebar";
 import { ThreatMap } from "@/components/map/threat-map";
 import { TimelineScrubber } from "@/components/map/timeline-scrubber";
-import { MapControls } from "@/components/map/map-controls";
+import { LayerPanel } from "@/components/map/layer-panel";
+import { SatelliteControls } from "@/components/map/satellite-controls";
+import { HudBanner } from "@/components/map/hud-banner";
+import { CityFlyBar } from "@/components/map/city-fly-bar";
+import { TimelinePanel } from "@/components/map/timeline-panel";
+import { TimelineBar } from "@/components/map/timeline-bar";
 import { WelcomeModal } from "@/components/welcome-modal";
 import { SignInPanel, SignInModal } from "@/components/auth";
 import { PolymarketTicker, POLYMARKET_TICKER_HEIGHT } from "@/components/polymarket-ticker";
@@ -18,34 +23,49 @@ export default function Home() {
   const [showSignInModal, setShowSignInModal] = useState(false);
   const { isLoading, refresh, requiresSignIn } = useEvents({
     autoRefresh: true,
-    refreshInterval: 300000, // 5 minutes
+    refreshInterval: 300000,
   });
 
   useEffect(() => {
     const dismissed = localStorage.getItem(WELCOME_DISMISSED_KEY);
-    if (!dismissed) {
-      setShowWelcome(true);
-    }
+    if (!dismissed) setShowWelcome(true);
   }, []);
 
   useEffect(() => {
-    if (requiresSignIn) {
-      setShowSignInModal(true);
-    }
+    if (requiresSignIn) setShowSignInModal(true);
   }, [requiresSignIn]);
 
   return (
     <div className="flex h-screen flex-col" style={{ paddingBottom: POLYMARKET_TICKER_HEIGHT }}>
-      <Header
-        onRefresh={refresh}
-        isLoading={isLoading}
-        onShowHelp={() => setShowWelcome(true)}
-      />
+      <Header onRefresh={refresh} isLoading={isLoading} onShowHelp={() => setShowWelcome(true)} />
       <div className="flex flex-1 overflow-hidden">
         <div className="relative flex-1">
           <ThreatMap />
+
+          {/* HUD banner — top edge, above everything */}
+          <HudBanner />
+
+          {/* Layer control panel — top-left, below HUD */}
+          <div className="absolute left-4 top-[30px] z-10">
+            <LayerPanel />
+          </div>
+
+          {/* Timeline search panel — opens when triggered from LayerPanel */}
+          <TimelinePanel />
+
+          {/* Timeline bar — bottom-center, above city fly bar */}
+          <TimelineBar />
+
+          {/* Satellite date scrubber — bottom-center */}
+          <div className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2">
+            <SatelliteControls />
+          </div>
+
+          {/* City quick-fly bar — bottom edge */}
+          <CityFlyBar />
+
+          {/* Auto-pan toggle — bottom-left */}
           <TimelineScrubber />
-          <MapControls />
         </div>
         <Sidebar />
       </div>
