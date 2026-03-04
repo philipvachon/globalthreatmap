@@ -218,11 +218,72 @@ async function fetchNPSCameras(): Promise<CameraMarker[]> {
   }
 }
 
+// ─── Flock Safety / ALPR Cameras (OpenStreetMap Overpass) ────────────────────
+// Queries OSM for nodes tagged as ALPR/LPR surveillance cameras (Flock Safety and similar).
+// Data is community-sourced from FOIA disclosures and public observation.
+// Overpass API is free, no auth required.
+const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+
+const FLOCK_OVERPASS_QUERY = `[out:json][timeout:25];
+(
+  node["man_made"="surveillance"]["surveillance:type"~"^(ALPR|LPR|ANPR)$",i];
+  node["man_made"="surveillance"]["operator"~"flock",i];
+  node["man_made"="surveillance"]["brand"~"flock",i];
+);
+out body;`;
+
+async function fetchFlockCameras(): Promise<CameraMarker[]> {
+  try {
+    const res = await fetch(OVERPASS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `data=${encodeURIComponent(FLOCK_OVERPASS_QUERY)}`,
+      next: { revalidate: 3600 }, // ALPR locations change slowly
+    });
+    if (!res.ok) return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any = await res.json();
+    const elements: unknown[] = Array.isArray(data?.elements) ? data.elements : [];
+    return elements
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((el: any): CameraMarker | null => {
+        if (el.type !== "node") return null;
+        const lat = Number(el.lat);
+        const lon = Number(el.lon);
+        if (!isFinite(lat) || !isFinite(lon) || (lat === 0 && lon === 0)) return null;
+        const tags = el.tags ?? {};
+        const id = String(el.id);
+        const operator = tags["operator"] ?? tags["brand"] ?? "";
+        const placement = tags["surveillance:zone"] ?? tags["placement"] ?? "";
+        const ref = tags["ref"] ?? "";
+        const nameParts = [
+          operator || "ALPR Camera",
+          tags["name"] ?? "",
+          placement,
+          ref,
+        ].filter(Boolean);
+        const name = nameParts.join(" — ") || `ALPR Camera #${id}`;
+        return {
+          id: `flock-${id}`,
+          name,
+          latitude: lat,
+          longitude: lon,
+          imageUrl: "",          // LPR cameras have no public video feed
+          source: "flock" as const,
+          isOnline: true,
+        };
+      })
+      .filter((c): c is CameraMarker => c !== null);
+  } catch {
+    return [];
+  }
+}
+
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const source = searchParams.get("source") ?? "nyc"; // "nyc" | "faa" | "caltrans" | "wsdot" | "ndbc" | "nps" | "all"
+  const source = searchParams.get("source") ?? "nyc"; // "nyc" | "faa" | "caltrans" | "wsdot" | "ndbc" | "nps" | "flock" | "all"
 
   const cameras: CameraMarker[] = [];
 
@@ -298,6 +359,10 @@ export async function GET(request: Request) {
 
   if (source === "nps" || source === "all") {
     cameras.push(...(await fetchNPSCameras()));
+  }
+
+  if (source === "flock" || source === "all") {
+    cameras.push(...(await fetchFlockCameras()));
   }
 
   return NextResponse.json({

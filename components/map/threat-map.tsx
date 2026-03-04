@@ -347,6 +347,19 @@ const npsCameraLayer: LayerProps = {
   },
 };
 
+const flockCameraLayer: LayerProps = {
+  id: "flock-cameras",
+  type: "circle",
+  filter: ["==", ["get", "source"], "flock"],
+  paint: {
+    "circle-color": "#f43f5e",
+    "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 3, 14, 7],
+    "circle-stroke-width": 1.5,
+    "circle-stroke-color": "#ffffff",
+    "circle-opacity": 0.9,
+  },
+};
+
 // Camera label (only at high zoom)
 const cameraLabelLayer: LayerProps = {
   id: "camera-labels",
@@ -637,7 +650,7 @@ export function ThreatMap() {
     showAircraft, aircraft, hiddenAircraftTypes,
     showSeismic, earthquakes,
     showTraffic,
-    showNYCCameras, showFAACameras, showCaltransCameras, showWSDOTCameras, showNDBCBuoys, showNPSCameras, cameras,
+    showNYCCameras, showFAACameras, showCaltransCameras, showWSDOTCameras, showNDBCBuoys, showNPSCameras, showFlockCameras, cameras,
     showMaritime, vessels,
     showFire,
     showWeather, weatherPath, weatherHost,
@@ -981,17 +994,23 @@ export function ThreatMap() {
     })),
   }), [earthquakes]);
 
-  // Cameras: merge NYC + FAA based on which layers are active
-  const camerasGeoJSON = useMemo(() => ({
-    type: "FeatureCollection" as const,
-    features: cameras
-      .filter((c) => (c.source === "nyc" ? showNYCCameras : showFAACameras))
-      .map((c) => ({
-        type: "Feature" as const,
-        properties: { id: c.id, name: c.name, source: c.source, isOnline: c.isOnline, imageUrl: c.imageUrl },
-        geometry: { type: "Point" as const, coordinates: [c.longitude, c.latitude] },
-      })),
-  }), [cameras, showNYCCameras, showFAACameras]);
+  // Cameras: filter each source by its own visibility toggle
+  const camerasGeoJSON = useMemo(() => {
+    const sourceVisible: Record<string, boolean> = {
+      nyc: showNYCCameras, faa: showFAACameras, caltrans: showCaltransCameras,
+      wsdot: showWSDOTCameras, ndbc: showNDBCBuoys, nps: showNPSCameras, flock: showFlockCameras,
+    };
+    return {
+      type: "FeatureCollection" as const,
+      features: cameras
+        .filter((c) => sourceVisible[c.source] ?? false)
+        .map((c) => ({
+          type: "Feature" as const,
+          properties: { id: c.id, name: c.name, source: c.source, isOnline: c.isOnline, imageUrl: c.imageUrl },
+          geometry: { type: "Point" as const, coordinates: [c.longitude, c.latitude] },
+        })),
+    };
+  }, [cameras, showNYCCameras, showFAACameras, showCaltransCameras, showWSDOTCameras, showNDBCBuoys, showNPSCameras, showFlockCameras]);
 
   const vesselsGeoJSON = useMemo(() => ({
     type: "FeatureCollection" as const,
@@ -1085,12 +1104,13 @@ export function ThreatMap() {
     if (showWSDOTCameras)    ids.push("wsdot-cameras");
     if (showNDBCBuoys)       ids.push("ndbc-cameras");
     if (showNPSCameras)      ids.push("nps-cameras");
+    if (showFlockCameras)    ids.push("flock-cameras");
     if (showMaritime) ids.push("vessel-points");
     if (showAlerts) ids.push("alerts-fill");
     if (showGhostMaps) ids.push("ghostmaps-icon", "ghostmaps-fill");
     if (showSatellites) ids.push("satellite-dots");
     return ids;
-  }, [showClusters, showAircraft, showSeismic, showNYCCameras, showFAACameras, showCaltransCameras, showWSDOTCameras, showNDBCBuoys, showNPSCameras, showMaritime, showAlerts, showGhostMaps, showSatellites]);
+  }, [showClusters, showAircraft, showSeismic, showNYCCameras, showFAACameras, showCaltransCameras, showWSDOTCameras, showNDBCBuoys, showNPSCameras, showFlockCameras, showMaritime, showAlerts, showGhostMaps, showSatellites]);
 
   // ─── Map click handler ───────────────────────────────────────────────────────
 
@@ -1133,7 +1153,7 @@ export function ThreatMap() {
         setSelQuake({ longitude: coords[0], latitude: coords[1], magnitude: props.magnitude, place: props.place, time: props.time, depth: props.depth });
         return;
       }
-      if (lid === "nyc-cameras" || lid === "faa-cameras" || lid === "caltrans-cameras" || lid === "wsdot-cameras" || lid === "ndbc-cameras" || lid === "nps-cameras") {
+      if (lid === "nyc-cameras" || lid === "faa-cameras" || lid === "caltrans-cameras" || lid === "wsdot-cameras" || lid === "ndbc-cameras" || lid === "nps-cameras" || lid === "flock-cameras") {
         setSelCamera({ longitude: coords[0], latitude: coords[1], id: props.id });
         setCameraExpanded(false);
         return;
@@ -1218,7 +1238,7 @@ export function ThreatMap() {
     );
   }
 
-  const showAnyCameras = showNYCCameras || showFAACameras || showCaltransCameras || showWSDOTCameras || showNDBCBuoys || showNPSCameras;
+  const showAnyCameras = showNYCCameras || showFAACameras || showCaltransCameras || showWSDOTCameras || showNDBCBuoys || showNPSCameras || showFlockCameras;
   const cssFilter = VISUAL_FILTERS[visualMode] ?? "";
 
   // Base map: satellite when enabled (all zoom levels), dark otherwise.
@@ -1513,6 +1533,7 @@ export function ThreatMap() {
               {showWSDOTCameras    && <Layer {...wsdotCameraLayer} />}
               {showNDBCBuoys       && <Layer {...ndbcCameraLayer} />}
               {showNPSCameras      && <Layer {...npsCameraLayer} />}
+              {showFlockCameras    && <Layer {...flockCameraLayer} />}
               <Layer {...cameraLabelLayer} />
             </Source>
           )}

@@ -42,7 +42,7 @@ export interface CameraMarker {
   latitude: number;
   longitude: number;
   imageUrl: string;
-  source: "nyc" | "faa" | "caltrans" | "wsdot" | "ndbc" | "nps";
+  source: "nyc" | "faa" | "caltrans" | "wsdot" | "ndbc" | "nps" | "flock";
   isOnline: boolean;
 }
 
@@ -112,6 +112,7 @@ interface MapState {
   showWSDOTCameras: boolean;
   showNDBCBuoys: boolean;
   showNPSCameras: boolean;
+  showFlockCameras: boolean;
   showMaritime: boolean;
   showFire: boolean;
   showWeather: boolean;
@@ -173,6 +174,7 @@ interface MapState {
   toggleWSDOTCameras: () => void;
   toggleNDBCBuoys: () => void;
   toggleNPSCameras: () => void;
+  toggleFlockCameras: () => void;
   toggleMaritime: () => void;
   toggleFire: () => void;
   toggleWeather: () => void;
@@ -246,6 +248,7 @@ export const useMapStore = create<MapState>((set) => ({
   showWSDOTCameras: false,
   showNDBCBuoys: false,
   showNPSCameras: false,
+  showFlockCameras: false,
   showMaritime: false,
   showFire: false,
   showWeather: false,
@@ -310,6 +313,7 @@ export const useMapStore = create<MapState>((set) => ({
   toggleWSDOTCameras:    () => set((s) => ({ showWSDOTCameras:    !s.showWSDOTCameras })),
   toggleNDBCBuoys:       () => set((s) => ({ showNDBCBuoys:       !s.showNDBCBuoys })),
   toggleNPSCameras:      () => set((s) => ({ showNPSCameras:      !s.showNPSCameras })),
+  toggleFlockCameras:    () => set((s) => ({ showFlockCameras:    !s.showFlockCameras })),
   toggleMaritime:      () => set((s) => ({ showMaritime:      !s.showMaritime })),
   toggleFire:          () => set((s) => ({ showFire:          !s.showFire })),
   toggleWeather:       () => set((s) => ({ showWeather:       !s.showWeather })),

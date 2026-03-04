@@ -104,6 +104,7 @@ export function LayerPanel() {
     showWSDOTCameras,    toggleWSDOTCameras,
     showNDBCBuoys,       toggleNDBCBuoys,
     showNPSCameras,      toggleNPSCameras,
+    showFlockCameras,    toggleFlockCameras,
     flyTo, viewport,
   } = useMapStore();
 
@@ -314,6 +315,15 @@ export function LayerPanel() {
             iconColor="text-green-400"
             loading={camerasLoading && showNPSCameras}
             badge="NPS"
+          />
+          <ToggleRow
+            label="Flock LPR"
+            active={showFlockCameras}
+            onToggle={() => { toggleFlockCameras(); if (!showFlockCameras && viewport.zoom < 4) flyTo(-98.5, 39.5, 4); }}
+            icon={<Camera className="h-3.5 w-3.5" />}
+            iconColor="text-rose-400"
+            loading={camerasLoading && showFlockCameras}
+            badge="ALPR"
           />
         </div>
 
