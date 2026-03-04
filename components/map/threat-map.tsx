@@ -35,6 +35,8 @@ import { SignInModal } from "@/components/auth/sign-in-modal";
 import { ImageGeolocatePanel } from "./image-geolocate-panel";
 import { hasReachedLimit, incrementCountryClicks } from "@/lib/usage-limits";
 import { SnowOverlay } from "./snow-overlay";
+import { useTimelineStore } from "@/stores/timeline-store";
+import { EVENT_TYPE_CONFIG } from "./timeline-panel";
 
 const APP_MODE = process.env.NEXT_PUBLIC_APP_MODE || "self-hosted";
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -585,6 +587,13 @@ export function ThreatMap() {
 
   const { filteredEvents, selectedEvent, selectEvent } = useEventsStore();
   const { isAuthenticated, initialized } = useAuthStore();
+
+  // Timeline replay events
+  const {
+    events: timelineEvents,
+    selectedEvent: selectedTimelineEvent,
+    selectEvent: selectTimelineEvent,
+  } = useTimelineStore();
 
   // Activate data hooks
   useAircraft();
@@ -1581,6 +1590,91 @@ export function ThreatMap() {
                 </div>
               </Popup>
             </>
+          )}
+
+          {/* ─── Timeline event markers ──────────────────────────────── */}
+          {timelineEvents.map((ev) => {
+            const cfg = EVENT_TYPE_CONFIG[ev.eventType as keyof typeof EVENT_TYPE_CONFIG] ?? EVENT_TYPE_CONFIG.other;
+            const isSelected = selectedTimelineEvent?.id === ev.id;
+            return (
+              <Marker
+                key={ev.id}
+                longitude={ev.longitude}
+                latitude={ev.latitude}
+                anchor="bottom"
+                onClick={() => selectTimelineEvent(isSelected ? null : ev)}
+              >
+                <div
+                  className="flex cursor-pointer flex-col items-center transition-transform hover:scale-110"
+                  style={{ filter: isSelected ? `drop-shadow(0 0 6px ${cfg.color})` : undefined }}
+                >
+                  <div
+                    className="flex items-center justify-center rounded-full border-2 text-sm"
+                    style={{
+                      width:  isSelected ? 30 : 22,
+                      height: isSelected ? 30 : 22,
+                      fontSize: isSelected ? 14 : 11,
+                      borderColor: cfg.color,
+                      backgroundColor: isSelected ? `${cfg.color}35` : "rgba(0,0,0,0.7)",
+                    }}
+                  >
+                    {cfg.emoji}
+                  </div>
+                  <div className="h-2 w-px" style={{ backgroundColor: cfg.color, opacity: 0.7 }} />
+                </div>
+              </Marker>
+            );
+          })}
+
+          {/* Timeline selected event popup */}
+          {selectedTimelineEvent && (
+            <Popup
+              longitude={selectedTimelineEvent.longitude}
+              latitude={selectedTimelineEvent.latitude}
+              anchor="bottom"
+              offset={[0, -36] as [number, number]}
+              onClose={() => selectTimelineEvent(null)}
+              closeButton
+              closeOnClick={false}
+              className="threat-popup"
+              maxWidth="320px"
+            >
+              <div className="min-w-[260px] p-2 space-y-1.5">
+                <div className="flex items-start gap-2">
+                  <span className="mt-0.5 shrink-0 text-lg leading-none">
+                    {EVENT_TYPE_CONFIG[selectedTimelineEvent.eventType as keyof typeof EVENT_TYPE_CONFIG]?.emoji ?? "📍"}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-[11px] font-semibold text-foreground leading-snug">{selectedTimelineEvent.title}</h3>
+                    <div className="flex flex-wrap gap-x-1.5 text-[9px] text-muted-foreground mt-0.5">
+                      <span>{new Date(selectedTimelineEvent.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                      <span>·</span>
+                      <span className="capitalize">{selectedTimelineEvent.eventType}</span>
+                      <span>·</span>
+                      <span>{selectedTimelineEvent.location}</span>
+                    </div>
+                  </div>
+                </div>
+                {selectedTimelineEvent.summary && (
+                  <p className="text-[10px] text-muted-foreground leading-snug">{selectedTimelineEvent.summary}</p>
+                )}
+                <div className="flex items-center justify-between border-t border-border/30 pt-1">
+                  <span className="text-[9px] text-muted-foreground/60">
+                    Confidence: {Math.round(selectedTimelineEvent.confidence * 100)}%
+                  </span>
+                  {selectedTimelineEvent.url && (
+                    <a
+                      href={selectedTimelineEvent.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[9px] text-sky-400 hover:underline"
+                    >
+                      {selectedTimelineEvent.source} ↗
+                    </a>
+                  )}
+                </div>
+              </div>
+            </Popup>
           )}
         </Map>
       </div>

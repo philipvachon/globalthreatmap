@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useMapStore, type VisualMode } from "@/stores/map-store";
+import { useTimelineStore } from "@/stores/timeline-store";
 import {
   Layers, ChevronLeft,
   Flame, Dot, Shield, PlaneTakeoff, Activity, TrafficCone,
@@ -10,6 +11,7 @@ import {
   Radar, TriangleAlert, Orbit,
   Map, Type, Box, Globe, Sun, Mountain,
   Sparkles, Film, Snowflake, Bot,
+  Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -407,7 +409,39 @@ export function LayerPanel() {
             ))}
           </div>
         </div>
+
+        {/* ── Timeline Replay ──────────────────────── */}
+        <TimelineToggle />
       </div>
+    </div>
+  );
+}
+
+function TimelineToggle() {
+  const { isOpen, setOpen, events } = useTimelineStore();
+  return (
+    <div className="border-t border-border mt-1.5 pt-1.5 px-2 pb-0.5">
+      <button
+        onClick={() => setOpen(!isOpen)}
+        className={cn(
+          "flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs transition-colors text-left",
+          isOpen
+            ? "bg-sky-500/15 text-sky-400"
+            : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+        )}
+      >
+        <Clock className="h-3.5 w-3.5 shrink-0" />
+        <span className="flex-1 font-medium tracking-wide">Timeline Replay</span>
+        {events.length > 0 && (
+          <span className="rounded bg-sky-500/20 px-1 py-px text-[9px] font-bold text-sky-400">
+            {events.length}
+          </span>
+        )}
+        <span className={cn(
+          "h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
+          isOpen ? "bg-sky-400" : events.length > 0 ? "bg-green-400" : "bg-muted"
+        )} />
+      </button>
     </div>
   );
 }

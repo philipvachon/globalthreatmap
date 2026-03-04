@@ -10,6 +10,8 @@ import { LayerPanel } from "@/components/map/layer-panel";
 import { SatelliteControls } from "@/components/map/satellite-controls";
 import { HudBanner } from "@/components/map/hud-banner";
 import { CityFlyBar } from "@/components/map/city-fly-bar";
+import { TimelinePanel } from "@/components/map/timeline-panel";
+import { TimelineBar } from "@/components/map/timeline-bar";
 import { WelcomeModal } from "@/components/welcome-modal";
 import { SignInPanel, SignInModal } from "@/components/auth";
 import { PolymarketTicker, POLYMARKET_TICKER_HEIGHT } from "@/components/polymarket-ticker";
@@ -47,6 +49,12 @@ export default function Home() {
           <div className="absolute left-4 top-[30px] z-10">
             <LayerPanel />
           </div>
+
+          {/* Timeline search panel — opens when triggered from LayerPanel */}
+          <TimelinePanel />
+
+          {/* Timeline bar — bottom-center, above city fly bar */}
+          <TimelineBar />
 
           {/* Satellite date scrubber — bottom-center */}
           <div className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2">
